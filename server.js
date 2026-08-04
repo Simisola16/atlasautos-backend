@@ -24,10 +24,34 @@ dotenv.config();
 const app = express();
 const httpServer = createServer(app);
 
+// Allowed Origins for CORS
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  'https://atlasautos.vercel.app',
+  'https://atlasautos-one.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174'
+].filter(Boolean);
+
+const corsOriginCheck = (origin, callback) => {
+  if (!origin) return callback(null, true);
+  if (
+    allowedOrigins.includes(origin) ||
+    origin.endsWith('.vercel.app') ||
+    origin.includes('localhost') ||
+    origin.includes('127.0.0.1')
+  ) {
+    return callback(null, true);
+  }
+  callback(null, true);
+};
+
 // Initialize Socket.io
 const io = new Server(httpServer, {
   cors: {
-    origin: [process.env.CLIENT_URL, 'http://localhost:5173', 'http://127.0.0.1:5173'].filter(Boolean),
+    origin: corsOriginCheck,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     credentials: true
   }
@@ -35,8 +59,10 @@ const io = new Server(httpServer, {
 
 // Middleware
 app.use(cors({
-  origin: [process.env.CLIENT_URL, 'http://localhost:5173', 'http://127.0.0.1:5173'].filter(Boolean),
-  credentials: true
+  origin: corsOriginCheck,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
