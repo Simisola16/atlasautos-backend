@@ -1,18 +1,42 @@
-import nodemailer from 'nodemailer';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { Resend } from 'resend';
 import dotenv from 'dotenv';
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-const passClean = process.env.EMAIL_PASS ? process.env.EMAIL_PASS.replace(/\s+/g, '') : '';
+dotenv.config({ path: path.join(__dirname, '../.env') });
 
-// Create transporter using Gmail service configuration
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: passClean
+// Initialize Resend API client
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+// Default sender address (uses onboarding@resend.dev for testing unless EMAIL_FROM is customized)
+const defaultSender = process.env.EMAIL_FROM || 'AtlasAutos <onboarding@resend.dev>';
+
+// Send email using Resend SDK
+export const sendEmail = async ({ from, to, subject, html }) => {
+  try {
+    const sender = from || defaultSender;
+    const { data, error } = await resend.emails.send({
+      from: sender,
+      to: Array.isArray(to) ? to : [to],
+      subject,
+      html
+    });
+
+    if (error) {
+      console.error('[Resend Email Error]:', error);
+      throw new Error(error.message || 'Failed to send email via Resend');
+    }
+
+    console.log(`[Resend Email Sent] ID: ${data?.id} To: ${to}`);
+    return data;
+  } catch (error) {
+    console.error('[Email Dispatch Failed]:', error.message);
+    throw error;
   }
-});
+};
 
 // Email template wrapper with AtlasAutos branding
 const emailTemplate = (title, content, ctaText = '', ctaLink = '') => {
@@ -86,15 +110,12 @@ export const sendBuyerWelcomeEmail = async (email, name) => {
     </div>
     <p class="text">Start your car search today and find your dream vehicle!</p>
   `;
-  
-  const mailOptions = {
-    from: `"AtlasAutos" <${process.env.EMAIL_USER}>`,
+
+  await sendEmail({
     to: email,
     subject: 'Welcome to AtlasAutos - Your Car Search Starts Here!',
     html: emailTemplate('Welcome to AtlasAutos!', content, 'Browse Cars', `${process.env.CLIENT_URL}/browse`)
-  };
-  
-  await transporter.sendMail(mailOptions);
+  });
 };
 
 // Send welcome email to sellers
@@ -114,15 +135,12 @@ export const sendSellerWelcomeEmail = async (email, name, dealershipName) => {
     </div>
     <p class="text">Head over to your dashboard to list your first car!</p>
   `;
-  
-  const mailOptions = {
-    from: `"AtlasAutos" <${process.env.EMAIL_USER}>`,
+
+  await sendEmail({
     to: email,
     subject: 'Welcome to AtlasAutos - Start Selling Cars Today!',
     html: emailTemplate('Welcome to AtlasAutos!', content, 'Go to Dashboard', `${process.env.CLIENT_URL}/seller/dashboard`)
-  };
-  
-  await transporter.sendMail(mailOptions);
+  });
 };
 
 // Send password reset email
@@ -138,15 +156,12 @@ export const sendPasswordResetEmail = async (email, name, resetToken) => {
     </div>
     <p class="text">If you didn't request this password reset, you can safely ignore this email.</p>
   `;
-  
-  const mailOptions = {
-    from: `"AtlasAutos" <${process.env.EMAIL_USER}>`,
+
+  await sendEmail({
     to: email,
     subject: 'Password Reset Request - AtlasAutos',
     html: emailTemplate('Reset Your Password', content, 'Reset Password', resetLink)
-  };
-  
-  await transporter.sendMail(mailOptions);
+  });
 };
 
 // Send new message notification email
@@ -203,14 +218,11 @@ export const sendNewMessageEmail = async (
     </div>
   `;
 
-  const mailOptions = {
-    from: `"AtlasAutos Messaging" <${process.env.EMAIL_USER}>`,
+  await sendEmail({
     to: email,
     subject: `New message from ${senderName} regarding ${carName} - AtlasAutos`,
     html: emailTemplate('New Message Notification', content, 'View & Reply to Message', chatLink)
-  };
-
-  await transporter.sendMail(mailOptions);
+  });
 };
 
 // Send listing published confirmation to seller
@@ -226,15 +238,12 @@ export const sendListingPublishedEmail = async (email, sellerName, carDetails) =
     </div>
     <p class="text">Your listing is now live and visible to thousands of potential buyers!</p>
   `;
-  
-  const mailOptions = {
-    from: `"AtlasAutos" <${process.env.EMAIL_USER}>`,
+
+  await sendEmail({
     to: email,
     subject: 'Your Car Listing is Now Live! - AtlasAutos',
     html: emailTemplate('Listing Published Successfully', content, 'View My Listings', `${process.env.CLIENT_URL}/seller/listings`)
-  };
-  
-  await transporter.sendMail(mailOptions);
+  });
 };
 
 // Send 6-digit email verification code
@@ -251,15 +260,12 @@ export const sendVerificationCodeEmail = async (email, name, code) => {
     </div>
     <p class="text">If you did not request this, please ignore this email.</p>
   `;
-  
-  const mailOptions = {
-    from: `"AtlasAutos" <${process.env.EMAIL_USER}>`,
+
+  await sendEmail({
     to: email,
     subject: `${code} is your AtlasAutos Verification Code`,
     html: emailTemplate('Verify Your Email', content)
-  };
-  
-  await transporter.sendMail(mailOptions);
+  });
 };
 
 // Send email verification link for sellers
@@ -275,15 +281,12 @@ export const sendVerificationEmail = async (email, name, verificationToken) => {
     </div>
     <p class="text">Once verified, you'll be able to list cars and start selling on AtlasAutos!</p>
   `;
-  
-  const mailOptions = {
-    from: `"AtlasAutos" <${process.env.EMAIL_USER}>`,
+
+  await sendEmail({
     to: email,
     subject: 'Verify Your Email - AtlasAutos Seller Account',
     html: emailTemplate('Verify Your Email', content, 'Verify Email Now', verifyLink)
-  };
-  
-  await transporter.sendMail(mailOptions);
+  });
 };
 
-export default transporter;
+export default sendEmail;
