@@ -8,16 +8,29 @@ const __dirname = path.dirname(__filename);
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
-// Initialize Resend API client
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy getter for Resend client to prevent startup crash if RESEND_API_KEY is missing
+const getResendClient = () => {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.warn('[Resend Warning] RESEND_API_KEY environment variable is not defined.');
+    return null;
+  }
+  return new Resend(apiKey);
+};
 
 // Default sender address (uses onboarding@resend.dev for testing unless EMAIL_FROM is customized)
-const defaultSender = process.env.EMAIL_FROM || 'AtlasAutos <onboarding@resend.dev>';
+const getDefaultSender = () => process.env.EMAIL_FROM || 'AtlasAutos <onboarding@resend.dev>';
 
 // Send email using Resend SDK
 export const sendEmail = async ({ from, to, subject, html }) => {
   try {
-    const sender = from || defaultSender;
+    const resend = getResendClient();
+    if (!resend) {
+      console.error('[Resend Error] Cannot send email: RESEND_API_KEY environment variable is missing.');
+      return null;
+    }
+
+    const sender = from || getDefaultSender();
     const { data, error } = await resend.emails.send({
       from: sender,
       to: Array.isArray(to) ? to : [to],
@@ -27,14 +40,14 @@ export const sendEmail = async ({ from, to, subject, html }) => {
 
     if (error) {
       console.error('[Resend Email Error]:', error);
-      throw new Error(error.message || 'Failed to send email via Resend');
+      return null;
     }
 
     console.log(`[Resend Email Sent] ID: ${data?.id} To: ${to}`);
     return data;
   } catch (error) {
     console.error('[Email Dispatch Failed]:', error.message);
-    throw error;
+    return null;
   }
 };
 
