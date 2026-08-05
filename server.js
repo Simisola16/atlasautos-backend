@@ -143,9 +143,9 @@ io.on('connection', (socket) => {
 
       // Get chat details
       const chat = await Chat.findById(chatId)
-        .populate('car', 'brand model year')
+        .populate('car', 'brand model year price')
         .populate('buyer', 'fullName email profilePhoto')
-        .populate('seller', 'fullName email profilePhoto');
+        .populate('seller', 'fullName dealershipName email profilePhoto');
 
       if (!chat) {
         console.error(`[SOCKET] Chat not found: ${chatId}`);
@@ -184,7 +184,7 @@ io.on('connection', (socket) => {
       // Emit message to all users in the chat room
       io.to(chatId).emit('new-message', populatedMessage);
 
-      // Emit updated chat to both users
+      // Emit updated chat to recipient socket if online
       const recipientId = isBuyer ? chat.seller._id.toString() : chat.buyer._id.toString();
       const recipientSocketId = connectedUsers.get(recipientId);
 
@@ -192,35 +192,56 @@ io.on('connection', (socket) => {
         // Recipient is online, update their conversation list
         io.to(recipientSocketId).emit('new-conversation', {
           chat: await Chat.findById(chatId)
-            .populate('car', 'brand model year coverPhoto')
+            .populate('car', 'brand model year coverPhoto price')
             .populate('buyer', 'fullName profilePhoto')
             .populate('seller', 'fullName dealershipName profilePhoto')
         });
-      } else {
-        // Recipient is offline, send email notification
-        const recipient = isBuyer ? chat.seller : chat.buyer;
-        const sender = isBuyer ? chat.buyer : chat.seller;
-        const recipientUser = await User.findById(recipient._id);
+      }
 
+      // Process email notification (with 1-minute anti-spam buffer per conversation)
+      const recipient = isBuyer ? chat.seller : chat.buyer;
+      const sender = isBuyer ? chat.buyer : chat.seller;
+      const recipientUser = await User.findById(recipient._id);
+
+      if (recipientUser && recipientUser.email) {
         const lastEmailKey = chatId.toString();
         const lastEmailTime = recipientUser.lastEmailNotification?.get(lastEmailKey);
-        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+        const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
 
-        if (!lastEmailTime || lastEmailTime < oneHourAgo) {
+        if (!lastEmailTime || lastEmailTime < oneMinuteAgo) {
           try {
+            const senderName = isBuyer 
+              ? sender.fullName 
+              : (sender.dealershipName || sender.fullName);
+            const senderRole = isBuyer ? 'buyer' : 'seller';
+            const carName = chat.car ? `${chat.car.year} ${chat.car.brand} ${chat.car.model}` : 'Vehicle Listing';
+            const carPriceFormatted = chat.car?.price ? `₦${chat.car.price.toLocaleString()}` : '';
+            const chatLink = recipientUser.role === 'seller'
+              ? `${process.env.CLIENT_URL}/seller/messages`
+              : `${process.env.CLIENT_URL}/chat/${chatId}`;
+
+            console.log(`[SOCKET EMAIL] Sending Resend email to ${recipient.email} from ${senderName}...`);
             await sendNewMessageEmail(
               recipient.email,
               recipient.fullName,
-              sender.fullName,
-              `${chat.car.year} ${chat.car.brand} ${chat.car.model}`,
-              `${process.env.CLIENT_URL}/chat/${chatId}`
+              senderName,
+              carName,
+              chatLink,
+              content.trim(),
+              senderRole,
+              carPriceFormatted
             );
 
+            if (!recipientUser.lastEmailNotification) {
+              recipientUser.lastEmailNotification = new Map();
+            }
             recipientUser.lastEmailNotification.set(lastEmailKey, new Date());
             await recipientUser.save();
           } catch (emailError) {
             console.error('Email notification failed:', emailError);
           }
+        } else {
+          console.log(`[SOCKET EMAIL] Skipped email to ${recipient.email} - sent less than 1 minute ago.`);
         }
       }
 
