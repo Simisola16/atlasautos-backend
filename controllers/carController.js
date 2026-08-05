@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Car from '../models/Car.js';
 import User from '../models/User.js';
 import { uploadToCloudinary } from '../utils/cloudinary.js';
@@ -199,6 +200,13 @@ export const getCarById = async (req, res) => {
   try {
     const { id } = req.params;
     
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(404).json({
+        success: false,
+        message: 'Car not found'
+      });
+    }
+
     const car = await Car.findById(id)
       .populate('seller', 'fullName dealershipName dealershipAddress profilePhoto isVerified phoneNumber state city yearsInBusiness businessDescription createdAt');
     
@@ -209,14 +217,26 @@ export const getCarById = async (req, res) => {
       });
     }
     
-    // Increment view count
-    await car.incrementViewCount();
+    // Increment view count safely
+    try {
+      if (typeof car.incrementViewCount === 'function') {
+        await car.incrementViewCount();
+      }
+    } catch (err) {
+      console.error('Failed to increment view count:', err);
+    }
     
     // Check if car is in user's favorites
     let isFavorite = false;
     if (req.user) {
-      const user = await User.findById(req.user.id);
-      isFavorite = user.favorites.includes(car._id);
+      try {
+        const user = await User.findById(req.user.id);
+        if (user && Array.isArray(user.favorites)) {
+          isFavorite = user.favorites.some(favId => favId && favId.toString() === car._id.toString());
+        }
+      } catch (favErr) {
+        console.error('Failed to check user favorites:', favErr);
+      }
     }
     
     res.status(200).json({
@@ -227,6 +247,12 @@ export const getCarById = async (req, res) => {
       }
     });
   } catch (error) {
+    if (error.name === 'CastError') {
+      return res.status(404).json({
+        success: false,
+        message: 'Car not found'
+      });
+    }
     console.error('Get car error:', error);
     res.status(500).json({
       success: false,
