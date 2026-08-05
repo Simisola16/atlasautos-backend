@@ -7,7 +7,7 @@ import {
   sendPasswordResetEmail,
   sendVerificationEmail
 } from '../utils/emailService.js';
-import { uploadToSupabase } from '../utils/supabase.js';
+import { uploadToCloudinary } from '../utils/cloudinary.js';
 
 // Generate JWT token
 const generateToken = (id) => {
@@ -62,11 +62,9 @@ export const register = async (req, res) => {
     // Handle profile photo upload
     let profilePhotoUrl = '';
     if (req.file) {
-      profilePhotoUrl = await uploadToSupabase(
+      profilePhotoUrl = await uploadToCloudinary(
         req.file.buffer, 
-        req.file.originalname, 
-        'profiles',
-        req.file.mimetype
+        'atlasautos/profiles'
       );
     }
     
@@ -314,11 +312,9 @@ export const updateProfile = async (req, res) => {
     
     // Handle profile photo upload
     if (req.file) {
-      updateData.profilePhoto = await uploadToSupabase(
+      updateData.profilePhoto = await uploadToCloudinary(
         req.file.buffer, 
-        req.file.originalname, 
-        'profiles',
-        req.file.mimetype
+        'atlasautos/profiles'
       );
     }
     

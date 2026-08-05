@@ -4,7 +4,6 @@ import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import mongoose from 'mongoose';
-import { saveMessage, markMessagesRead } from './utils/chatMessageService.js';
 
 // Import routes
 import authRoutes from './routes/authRoutes.js';
@@ -159,33 +158,15 @@ io.on('connection', (socket) => {
       const isBuyer = chat.buyer._id.toString() === senderId;
       console.log(`[SOCKET] isBuyer=${isBuyer}, buyer._id=${chat.buyer._id}, seller._id=${chat.seller._id}`);
       
-      let populatedMessage;
-
-      if (isBuyer) {
-        // Buyer messages go to MongoDB
-        console.log('[SOCKET] Saving buyer message to MongoDB...');
-        const message = await Message.create({
-          chat: chatId,
-          sender: senderId,
-          content: content.trim(),
-          status: 'sent'
-        });
-        populatedMessage = await Message.findById(message._id).populate('sender', 'fullName profilePhoto');
-        console.log('[SOCKET] MongoDB save SUCCESS:', message._id);
-      } else {
-        // Seller messages go to Supabase
-        console.log('[SOCKET] Saving seller message to Supabase...');
-        const supaMsg = await saveMessage(chatId, senderId, content.trim());
-        console.log('[SOCKET] Supabase save result:', supaMsg ? 'SUCCESS' : 'FAILED');
-        populatedMessage = {
-          _id: supaMsg ? supaMsg.id : Date.now().toString(),
-          chat: chatId,
-          sender: chat.seller,
-          content: content.trim(),
-          status: 'sent',
-          createdAt: supaMsg ? supaMsg.created_at : new Date()
-        };
-      }
+      console.log('[SOCKET] Saving message to MongoDB...');
+      const message = await Message.create({
+        chat: chatId,
+        sender: senderId,
+        content: content.trim(),
+        status: 'sent'
+      });
+      const populatedMessage = await Message.findById(message._id).populate('sender', 'fullName profilePhoto');
+      console.log('[SOCKET] MongoDB save SUCCESS:', message._id);
       
       // Update chat
       chat.lastMessage = content.trim();
@@ -270,20 +251,15 @@ io.on('connection', (socket) => {
   // Handle message read receipt
   socket.on('mark-read', async ({ chatId, userId }) => {
     try {
-      // If reader is buyer, mark seller's messages read in Supabase
-      // If reader is seller, mark buyer's messages read in MongoDB
       const chat = await Chat.findById(chatId);
       if (chat) {
+        await Message.updateMany(
+          { chat: chatId, sender: { $ne: userId }, status: { $ne: 'read' } },
+          { status: 'read', readAt: new Date() }
+        );
         if (chat.buyer.toString() === userId) {
-          // Buyer reading -> Update Supabase
-          markMessagesRead(chatId, userId);
           chat.unreadCountBuyer = 0;
         } else {
-          // Seller reading -> Update MongoDB
-          await Message.updateMany(
-            { chat: chatId, sender: { $ne: userId }, status: { $ne: 'read' } },
-            { status: 'read', readAt: new Date() }
-          );
           chat.unreadCountSeller = 0;
         }
         await chat.save();

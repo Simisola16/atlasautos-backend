@@ -3,7 +3,6 @@ import Message from '../models/Message.js';
 import Car from '../models/Car.js';
 import User from '../models/User.js';
 import { sendNewMessageEmail } from '../utils/emailService.js';
-import { saveMessage, getMessages as getSupabaseMessages, markMessagesRead } from '../utils/chatMessageService.js';
 
 // Get or create chat
 export const getOrCreateChat = async (req, res) => {
@@ -123,26 +122,10 @@ export const getMessages = async (req, res) => {
       });
     }
     
-    // Get messages from MongoDB (Buyer messages)
-    const mongoMessages = await Message.find({ chat: chatId })
-      .populate('sender', 'fullName profilePhoto');
-
-    // Get messages from Supabase (Seller messages)
-    const supaRawMessages = await getSupabaseMessages(chatId);
-    const mappedSupaMessages = supaRawMessages.map(m => ({
-      _id: m.id,
-      chat: chatId,
-      sender: chat.seller,
-      content: m.content,
-      status: m.status,
-      createdAt: m.created_at,
-      readAt: m.read_at
-    }));
-
-    // Combine and sort
-    const messages = [...mongoMessages, ...mappedSupaMessages].sort(
-      (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
-    );
+    // Get messages from MongoDB
+    const messages = await Message.find({ chat: chatId })
+      .populate('sender', 'fullName profilePhoto')
+      .sort({ createdAt: 1 });
 
     // Mark messages as read
     await Message.updateMany(
@@ -213,29 +196,14 @@ export const sendMessage = async (req, res) => {
     
     const isBuyer = chat.buyer._id.toString() === senderId;
     
-    let populatedMessage;
-
-    if (isBuyer) {
-      // Buyer messages go to MongoDB
-      const message = await Message.create({
-        chat: chatId,
-        sender: senderId,
-        content: content.trim(),
-        status: 'sent'
-      });
-      populatedMessage = await Message.findById(message._id).populate('sender', 'fullName profilePhoto');
-    } else {
-      // Seller messages go to Supabase
-      const supaMsg = await saveMessage(chatId, senderId, content.trim());
-      populatedMessage = {
-        _id: supaMsg ? supaMsg.id : Date.now().toString(),
-        chat: chatId,
-        sender: chat.seller,
-        content: content.trim(),
-        status: 'sent',
-        createdAt: supaMsg ? supaMsg.created_at : new Date()
-      };
-    }
+    // Create message in MongoDB
+    const message = await Message.create({
+      chat: chatId,
+      sender: senderId,
+      content: content.trim(),
+      status: 'sent'
+    });
+    const populatedMessage = await Message.findById(message._id).populate('sender', 'fullName profilePhoto');
     
     // Update chat
     chat.lastMessage = content.trim();
@@ -334,16 +302,15 @@ export const markAsRead = async (req, res) => {
       });
     }
     
-    // If reader is buyer, mark seller's messages read in Supabase
-    // If reader is seller, mark buyer's messages read in MongoDB
+    // Mark unread messages for recipient in MongoDB
+    await Message.updateMany(
+      { chat: chatId, sender: { $ne: userId }, status: { $ne: 'read' } },
+      { status: 'read', readAt: new Date() }
+    );
+
     if (chat.buyer.toString() === userId) {
-      markMessagesRead(chatId, userId);
       chat.unreadCountBuyer = 0;
     } else {
-      await Message.updateMany(
-        { chat: chatId, sender: { $ne: userId }, status: { $ne: 'read' } },
-        { status: 'read', readAt: new Date() }
-      );
       chat.unreadCountSeller = 0;
     }
     await chat.save();

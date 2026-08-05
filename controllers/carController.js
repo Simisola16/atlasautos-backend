@@ -1,12 +1,12 @@
 import Car from '../models/Car.js';
 import User from '../models/User.js';
-import { uploadToSupabase, supabase } from '../utils/supabase.js';
+import { uploadToCloudinary } from '../utils/cloudinary.js';
 import { sendListingPublishedEmail } from '../utils/emailService.js';
 
-// Upload images to Supabase
-const uploadImages = async (files, folder) => {
+// Upload images to Cloudinary
+const uploadImages = async (files, folder = 'atlasautos/cars') => {
   const uploadPromises = files.map(file => {
-    return uploadToSupabase(file.buffer, file.originalname, 'atlasautos', file.mimetype);
+    return uploadToCloudinary(file.buffer, folder);
   });
   
   return await Promise.all(uploadPromises);
@@ -31,11 +31,9 @@ export const createCar = async (req, res) => {
     
     // Handle inspection report upload for used cars
     if (req.files && req.files.inspectionReport && req.files.inspectionReport[0]) {
-      const reportUrl = await uploadToSupabase(
+      const reportUrl = await uploadToCloudinary(
         req.files.inspectionReport[0].buffer, 
-        req.files.inspectionReport[0].originalname, 
-        'reports',
-        req.files.inspectionReport[0].mimetype
+        'atlasautos/reports'
       );
       carData.inspectionReport = reportUrl;
     }
@@ -323,11 +321,9 @@ export const updateCar = async (req, res) => {
     
     // Handle inspection report upload
     if (req.files && req.files.inspectionReport && req.files.inspectionReport[0]) {
-      const reportUrl = await uploadToSupabase(
+      const reportUrl = await uploadToCloudinary(
         req.files.inspectionReport[0].buffer, 
-        req.files.inspectionReport[0].originalname, 
-        'reports',
-        req.files.inspectionReport[0].mimetype
+        'atlasautos/reports'
       );
       updateData.inspectionReport = reportUrl;
     }
@@ -394,27 +390,7 @@ export const deleteCar = async (req, res) => {
       });
     }
     
-    // Delete images (Note: Implementation for Supabase storage deletion)
-    const deletePromises = [];
-    
-    if (car.photos && car.photos.length > 0) {
-      car.photos.forEach(photoUrl => {
-        if (photoUrl.includes('supabase.co')) {
-          const path = photoUrl.split('/').pop();
-          deletePromises.push(supabase.storage.from('atlasautos').remove([path]));
-        }
-      });
-    }
-
-    if (car.inspectionReport && car.inspectionReport.includes('supabase.co')) {
-      const path = car.inspectionReport.split('/').pop();
-      deletePromises.push(supabase.storage.from('reports').remove([path]));
-    }
-
-    if (deletePromises.length > 0) {
-      await Promise.all(deletePromises).catch(err => console.error('Supabase multi-delete error:', err));
-    }
-    
+    // Delete car record from database
     await Car.findByIdAndDelete(id);
     
     res.status(200).json({
@@ -459,13 +435,6 @@ export const deleteCarPhoto = async (req, res) => {
         success: false,
         message: 'Invalid photo index'
       });
-    }
-    
-    // Delete from Supabase
-    const photoUrl = car.photos[index];
-    if (photoUrl.includes('supabase.co')) {
-      const path = photoUrl.split('/').pop();
-      await supabase.storage.from('atlasautos').remove([path]).catch(err => console.error('Supabase photo delete error:', err));
     }
     
     // Remove from array
