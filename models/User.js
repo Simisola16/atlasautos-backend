@@ -144,5 +144,19 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
+const sanitizeUserDocs = (docs) => {
+  if (!docs) return;
+  const list = Array.isArray(docs) ? docs : [docs];
+  list.forEach(doc => {
+    if (doc && doc.profilePhoto && typeof doc.profilePhoto === 'string' && doc.profilePhoto.includes('supabase.co')) {
+      doc.profilePhoto = '';
+    }
+  });
+};
+
+userSchema.post(['find', 'findOne', 'findOneAndUpdate'], function(docs) {
+  sanitizeUserDocs(docs);
+});
+
 const User = mongoose.model('User', userSchema);
 export default User;

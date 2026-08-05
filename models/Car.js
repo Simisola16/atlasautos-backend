@@ -236,11 +236,36 @@ carSchema.virtual('formattedPrice').get(function() {
   return '₦' + this.price.toLocaleString('en-NG');
 });
 
-// Increment view count method
-carSchema.methods.incrementViewCount = async function() {
-  this.viewCount += 1;
-  await this.save();
+// Sanitizer function to replace legacy Supabase URLs
+const sanitizeUrl = (url) => {
+  if (!url || typeof url !== 'string') return url;
+  if (url.includes('supabase.co')) {
+    return '/assets/luxury_gwagon.png';
+  }
+  return url;
 };
+
+const sanitizeCarDocs = (docs) => {
+  if (!docs) return;
+  const list = Array.isArray(docs) ? docs : [docs];
+  list.forEach(doc => {
+    if (doc) {
+      if (doc.coverPhoto) {
+        doc.coverPhoto = sanitizeUrl(doc.coverPhoto);
+      }
+      if (Array.isArray(doc.photos)) {
+        doc.photos = doc.photos.map(sanitizeUrl);
+      }
+      if (doc.inspectionReport && typeof doc.inspectionReport === 'string' && doc.inspectionReport.includes('supabase.co')) {
+        doc.inspectionReport = '';
+      }
+    }
+  });
+};
+
+carSchema.post(['find', 'findOne', 'findOneAndUpdate'], function(docs) {
+  sanitizeCarDocs(docs);
+});
 
 const Car = mongoose.model('Car', carSchema);
 export default Car;
