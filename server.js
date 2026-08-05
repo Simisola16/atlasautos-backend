@@ -134,8 +134,12 @@ io.on('connection', (socket) => {
       console.log(`[SOCKET] send-message received: chatId=${chatId}, senderId=${senderId}, content="${content}"`);
       console.log(`[SOCKET] socket.userId=${socket.userId}`);
 
-      // Verify sender matches socket user
-      if (senderId !== socket.userId) {
+      // Verify sender matches socket user (fallback to senderId if socket.userId not set yet)
+      if (!socket.userId) {
+        socket.userId = senderId;
+      }
+
+      if (senderId && socket.userId && senderId.toString() !== socket.userId.toString()) {
         console.error(`[SOCKET] UNAUTHORIZED: senderId=${senderId} !== socket.userId=${socket.userId}`);
         socket.emit('error', { message: 'Unauthorized' });
         return;
@@ -154,7 +158,7 @@ io.on('connection', (socket) => {
       }
 
       // Figure out if sender is buyer or seller
-      const isBuyer = chat.buyer._id.toString() === senderId;
+      const isBuyer = chat.buyer._id.toString() === senderId.toString();
       console.log(`[SOCKET] isBuyer=${isBuyer}, buyer._id=${chat.buyer._id}, seller._id=${chat.seller._id}`);
 
       console.log('[SOCKET] Saving message to MongoDB...');

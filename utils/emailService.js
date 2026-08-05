@@ -31,6 +31,7 @@ export const sendEmail = async ({ from, to, subject, html }) => {
     }
 
     const sender = from || getDefaultSender();
+    console.log(`[Resend Sending Email] From: ${sender} | To: ${to} | Subject: ${subject}`);
     const { data, error } = await resend.emails.send({
       from: sender,
       to: Array.isArray(to) ? to : [to],
@@ -39,14 +40,14 @@ export const sendEmail = async ({ from, to, subject, html }) => {
     });
 
     if (error) {
-      console.error('[Resend Email Error]:', error);
+      console.error('[Resend Email API Error]:', JSON.stringify(error, null, 2));
       return null;
     }
 
-    console.log(`[Resend Email Sent] ID: ${data?.id} To: ${to}`);
+    console.log(`[Resend Email Dispatch SUCCESS] Message ID: ${data?.id} | Sent To: ${to}`);
     return data;
   } catch (error) {
-    console.error('[Email Dispatch Failed]:', error.message);
+    console.error('[Resend Email Exception]:', error.message);
     return null;
   }
 };
