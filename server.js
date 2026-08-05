@@ -198,50 +198,42 @@ io.on('connection', (socket) => {
         });
       }
 
-      // Process email notification (with 5-minute anti-spam buffer per conversation)
+      // Process email notification immediately for every message (instant delivery mode for testing)
       const recipient = isBuyer ? chat.seller : chat.buyer;
       const sender = isBuyer ? chat.buyer : chat.seller;
       const recipientUser = await User.findById(recipient._id);
 
       if (recipientUser && recipientUser.email) {
-        const lastEmailKey = chatId.toString();
-        const lastEmailTime = recipientUser.lastEmailNotification?.get(lastEmailKey);
-        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+        try {
+          const senderName = isBuyer 
+            ? sender.fullName 
+            : (sender.dealershipName || sender.fullName);
+          const senderRole = isBuyer ? 'buyer' : 'seller';
+          const carName = chat.car ? `${chat.car.year} ${chat.car.brand} ${chat.car.model}` : 'Vehicle Listing';
+          const carPriceFormatted = chat.car?.price ? `₦${chat.car.price.toLocaleString()}` : '';
+          const chatLink = recipientUser.role === 'seller'
+            ? `${process.env.CLIENT_URL}/seller/messages`
+            : `${process.env.CLIENT_URL}/chat/${chatId}`;
 
-        if (!lastEmailTime || lastEmailTime < fiveMinutesAgo) {
-          try {
-            const senderName = isBuyer 
-              ? sender.fullName 
-              : (sender.dealershipName || sender.fullName);
-            const senderRole = isBuyer ? 'buyer' : 'seller';
-            const carName = chat.car ? `${chat.car.year} ${chat.car.brand} ${chat.car.model}` : 'Vehicle Listing';
-            const carPriceFormatted = chat.car?.price ? `₦${chat.car.price.toLocaleString()}` : '';
-            const chatLink = recipientUser.role === 'seller'
-              ? `${process.env.CLIENT_URL}/seller/messages`
-              : `${process.env.CLIENT_URL}/chat/${chatId}`;
+          console.log(`[SOCKET EMAIL] Instant dispatching Resend email to ${recipient.email} from ${senderName}...`);
+          await sendNewMessageEmail(
+            recipient.email,
+            recipient.fullName,
+            senderName,
+            carName,
+            chatLink,
+            content.trim(),
+            senderRole,
+            carPriceFormatted
+          );
 
-            console.log(`[SOCKET EMAIL] Sending Resend email to ${recipient.email} from ${senderName}...`);
-            await sendNewMessageEmail(
-              recipient.email,
-              recipient.fullName,
-              senderName,
-              carName,
-              chatLink,
-              content.trim(),
-              senderRole,
-              carPriceFormatted
-            );
-
-            if (!recipientUser.lastEmailNotification) {
-              recipientUser.lastEmailNotification = new Map();
-            }
-            recipientUser.lastEmailNotification.set(lastEmailKey, new Date());
-            await recipientUser.save();
-          } catch (emailError) {
-            console.error('Email notification failed:', emailError);
+          if (!recipientUser.lastEmailNotification) {
+            recipientUser.lastEmailNotification = new Map();
           }
-        } else {
-          console.log(`[SOCKET EMAIL] Skipped email to ${recipient.email} - sent less than 5 minutes ago.`);
+          recipientUser.lastEmailNotification.set(chatId.toString(), new Date());
+          await recipientUser.save();
+        } catch (emailError) {
+          console.error('Email notification failed:', emailError);
         }
       }
 
