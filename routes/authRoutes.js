@@ -7,7 +7,8 @@ import {
   forgotPassword,
   resetPassword,
   verifyEmail,
-  resendVerification
+  resendVerification,
+  verifyCode
 } from '../controllers/authController.js';
 import { protect } from '../middleware/auth.js';
 import { uploadSingle, handleUploadError } from '../middleware/upload.js';
@@ -21,6 +22,8 @@ router.post('/forgot-password', forgotPassword);
 router.post('/reset-password/:token', resetPassword);
 router.get('/verify-email/:token', verifyEmail);
 router.post('/resend-verification', resendVerification);
+router.post('/verify-code', verifyCode);
+router.post('/resend-code', resendVerification);
 
 // Protected routes
 router.get('/me', protect, getMe);

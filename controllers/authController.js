@@ -5,7 +5,8 @@ import {
   sendBuyerWelcomeEmail, 
   sendSellerWelcomeEmail, 
   sendPasswordResetEmail,
-  sendVerificationEmail
+  sendVerificationEmail,
+  sendVerificationCodeEmail
 } from '../utils/emailService.js';
 import { uploadToCloudinary } from '../utils/cloudinary.js';
 
@@ -112,24 +113,25 @@ export const register = async (req, res) => {
     // Generate token
     const token = generateToken(user._id);
     
-    // For sellers, generate email verification token and send verification email
+    // For sellers, generate 6-digit email verification code and send verification email
     if (role === 'seller') {
-      const verificationToken = crypto.randomBytes(32).toString('hex');
-      user.emailVerificationToken = crypto.createHash('sha256').update(verificationToken).digest('hex');
-      user.emailVerificationExpire = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+      const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+      user.emailVerificationCode = verificationCode;
+      user.emailVerificationExpire = Date.now() + 30 * 60 * 1000; // 30 minutes
       await user.save({ validateBeforeSave: false });
       
       try {
-        await sendVerificationEmail(user.email, user.fullName, verificationToken);
+        await sendVerificationCodeEmail(user.email, user.fullName, verificationCode);
       } catch (emailError) {
-        console.error('Verification email sending failed:', emailError);
+        console.error('Verification code email sending failed:', emailError);
       }
       
       return res.status(201).json({
         success: true,
-        message: 'Account created! Please check your email to verify your account.',
+        message: 'Account created! Please check your email for your 6-digit verification code.',
         token,
         requiresVerification: true,
+        email: user.email,
         user: {
           id: user._id,
           fullName: user.fullName,
@@ -529,7 +531,7 @@ export const verifyEmail = async (req, res) => {
   }
 };
 
-// Resend verification email
+// Resend verification email / code
 export const resendVerification = async (req, res) => {
   try {
     const { email } = req.body;
@@ -541,12 +543,12 @@ export const resendVerification = async (req, res) => {
       });
     }
     
-    const user = await User.findOne({ email: email.toLowerCase(), role: 'seller' });
+    const user = await User.findOne({ email: email.toLowerCase() });
     
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'Seller account not found with this email'
+        message: 'Account not found with this email'
       });
     }
     
@@ -557,24 +559,126 @@ export const resendVerification = async (req, res) => {
       });
     }
     
-    // Generate new verification token
-    const verificationToken = crypto.randomBytes(32).toString('hex');
-    user.emailVerificationToken = crypto.createHash('sha256').update(verificationToken).digest('hex');
-    user.emailVerificationExpire = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+    // Generate new 6-digit verification code
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    user.emailVerificationCode = verificationCode;
+    user.emailVerificationExpire = Date.now() + 30 * 60 * 1000; // 30 minutes
     await user.save({ validateBeforeSave: false });
     
-    // Send verification email
-    await sendVerificationEmail(user.email, user.fullName, verificationToken);
+    // Send verification code email
+    await sendVerificationCodeEmail(user.email, user.fullName, verificationCode);
     
     res.status(200).json({
       success: true,
-      message: 'Verification email sent! Please check your inbox.'
+      message: 'A new 6-digit verification code has been sent to your email.'
     });
   } catch (error) {
     console.error('Resend verification error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error',
+      message: 'Server error sending verification code',
+      error: error.message
+    });
+  }
+};
+
+// Verify 6-digit code endpoint
+export const verifyCode = async (req, res) => {
+  try {
+    const { email, code } = req.body;
+    
+    if (!email || !code) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and 6-digit verification code are required'
+      });
+    }
+    
+    const user = await User.findOne({ email: email.toLowerCase() })
+      .select('+emailVerificationCode +emailVerificationExpire');
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User account not found with this email'
+      });
+    }
+    
+    if (user.isEmailVerified) {
+      const token = generateToken(user._id);
+      return res.status(200).json({
+        success: true,
+        message: 'Email is already verified',
+        token,
+        user: {
+          id: user._id,
+          fullName: user.fullName,
+          email: user.email,
+          role: user.role,
+          dealershipName: user.dealershipName,
+          isVerified: user.isVerified,
+          isEmailVerified: true
+        }
+      });
+    }
+    
+    if (!user.emailVerificationCode || user.emailVerificationCode.toString().trim() !== code.toString().trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid verification code. Please check your email and try again.'
+      });
+    }
+    
+    if (user.emailVerificationExpire && user.emailVerificationExpire < Date.now()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Verification code has expired. Please request a new code.'
+      });
+    }
+    
+    // Mark email as verified
+    user.isEmailVerified = true;
+    user.emailVerificationCode = undefined;
+    user.emailVerificationExpire = undefined;
+    await user.save({ validateBeforeSave: false });
+    
+    // Send seller welcome email
+    try {
+      if (user.role === 'seller') {
+        await sendSellerWelcomeEmail(user.email, user.fullName, user.dealershipName);
+      } else {
+        await sendBuyerWelcomeEmail(user.email, user.fullName);
+      }
+    } catch (emailError) {
+      console.error('Welcome email failed:', emailError);
+    }
+    
+    const token = generateToken(user._id);
+    
+    res.status(200).json({
+      success: true,
+      message: 'Email verified successfully! Your account is active.',
+      token,
+      user: {
+        id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        profilePhoto: user.profilePhoto,
+        state: user.state,
+        city: user.city,
+        role: user.role,
+        dealershipName: user.dealershipName,
+        isVerified: user.isVerified,
+        isEmailVerified: true,
+        createdAt: user.createdAt
+      }
+    });
+  } catch (error) {
+    console.error('Verify code error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error during verification',
       error: error.message
     });
   }

@@ -76,10 +76,14 @@ const userSchema = new mongoose.Schema({
     default: false
   },
   
-  // Email verification for sellers
+  // Email verification for sellers and users
   isEmailVerified: {
     type: Boolean,
     default: false
+  },
+  emailVerificationCode: {
+    type: String,
+    select: false
   },
   emailVerificationToken: {
     type: String,

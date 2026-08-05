@@ -3,14 +3,14 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Create transporter
+const passClean = process.env.EMAIL_PASS ? process.env.EMAIL_PASS.replace(/\s+/g, '') : '';
+
+// Create transporter using Gmail service configuration
 const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,
-  port: process.env.EMAIL_PORT,
-  secure: false,
+  service: 'gmail',
   auth: {
     user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
+    pass: passClean
   }
 });
 
@@ -103,8 +103,8 @@ export const sendSellerWelcomeEmail = async (email, name, dealershipName) => {
     <p class="text">Hello ${name},</p>
     <p class="text">Welcome to <strong>AtlasAutos</strong> - Nigeria's premier car marketplace!</p>
     <div class="highlight">
-      <p class="text"><strong>Your seller account for "${dealershipName}" has been successfully created.</strong></p>
-      <p class="text">As a seller, you can:</p>
+      <p class="text"><strong>Your seller account for "${dealershipName}" has been successfully created and verified.</strong></p>
+      <p class="text">As a seller, you can now:</p>
       <ul style="color: #e0e0e0; margin-left: 20px; margin-top: 10px;">
         <li>List unlimited cars for sale</li>
         <li>Receive inquiries from potential buyers</li>
@@ -112,7 +112,7 @@ export const sendSellerWelcomeEmail = async (email, name, dealershipName) => {
         <li>Track views and performance of your listings</li>
       </ul>
     </div>
-    <p class="text">Your dealership profile is being reviewed. Once verified, you'll receive a verification badge!</p>
+    <p class="text">Head over to your dashboard to list your first car!</p>
   `;
   
   const mailOptions = {
@@ -195,7 +195,32 @@ export const sendListingPublishedEmail = async (email, sellerName, carDetails) =
   await transporter.sendMail(mailOptions);
 };
 
-// Send email verification for sellers
+// Send 6-digit email verification code
+export const sendVerificationCodeEmail = async (email, name, code) => {
+  const content = `
+    <p class="text">Hello ${name},</p>
+    <p class="text">Thank you for signing up on <strong>AtlasAutos</strong>!</p>
+    <div class="highlight" style="text-align: center;">
+      <p class="text"><strong>Your 6-Digit Verification Code is:</strong></p>
+      <div style="font-size: 36px; font-weight: 800; letter-spacing: 8px; color: #F97316; margin: 20px 0; background: #111; padding: 15px; border-radius: 8px; border: 1px dashed #F97316;">
+        ${code}
+      </div>
+      <p class="text" style="font-size: 13px; color: #aaa;">This code will expire in 30 minutes. Enter this code to verify your account.</p>
+    </div>
+    <p class="text">If you did not request this, please ignore this email.</p>
+  `;
+  
+  const mailOptions = {
+    from: `"AtlasAutos" <${process.env.EMAIL_USER}>`,
+    to: email,
+    subject: `${code} is your AtlasAutos Verification Code`,
+    html: emailTemplate('Verify Your Email', content)
+  };
+  
+  await transporter.sendMail(mailOptions);
+};
+
+// Send email verification link for sellers
 export const sendVerificationEmail = async (email, name, verificationToken) => {
   const verifyLink = `${process.env.CLIENT_URL}/verify-email?token=${verificationToken}`;
   
