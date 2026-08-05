@@ -656,7 +656,7 @@ export const compareCars = async (req, res) => {
     const cars = await Car.find({
       _id: { $in: carIds },
       availabilityStatus: { $in: ['Available', 'Reserved'] }
-    }).populate('seller', 'fullName dealershipName profilePhoto isVerified');
+    }).populate('seller', 'fullName dealershipName profilePhoto isVerified state city');
     
     if (cars.length < 2) {
       return res.status(404).json({
