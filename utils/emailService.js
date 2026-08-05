@@ -150,24 +150,66 @@ export const sendPasswordResetEmail = async (email, name, resetToken) => {
 };
 
 // Send new message notification email
-export const sendNewMessageEmail = async (email, recipientName, senderName, carName, chatLink) => {
+export const sendNewMessageEmail = async (
+  email,
+  recipientName,
+  senderName,
+  carName,
+  chatLink,
+  messageSnippet = '',
+  senderRole = '',
+  carPrice = ''
+) => {
+  const roleBadge = senderRole
+    ? `<span style="background-color: #F97316; color: #ffffff; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; margin-left: 8px;">${senderRole}</span>`
+    : '';
+
+  const snippetHtml = messageSnippet
+    ? `
+      <div style="background-color: #111111; padding: 16px; border-radius: 8px; border-left: 4px solid #F97316; margin-top: 15px;">
+        <p style="font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #888888; font-weight: 600; margin-bottom: 6px;">Message Preview</p>
+        <p style="font-size: 15px; color: #ffffff; font-style: italic; white-space: pre-wrap; word-break: break-word;">"${messageSnippet}"</p>
+      </div>
+    `
+    : '';
+
+  const priceHtml = carPrice
+    ? `<p class="text" style="color: #F97316; font-size: 18px; font-weight: 700; margin-top: 4px;">${carPrice}</p>`
+    : '';
+
   const content = `
-    <p class="text">Hello ${recipientName},</p>
-    <p class="text">You have a new message on <strong>AtlasAutos</strong>!</p>
-    <div class="highlight">
-      <p class="text"><strong>From:</strong> ${senderName}</p>
-      <p class="text"><strong>Regarding:</strong> ${carName}</p>
+    <p class="text">Hello <strong>${recipientName}</strong>,</p>
+    <p class="text">You have received a new message on <strong>AtlasAutos</strong>.</p>
+
+    <div class="highlight" style="background-color: #222222; border-left: 4px solid #F97316; padding: 20px; border-radius: 8px; margin: 20px 0;">
+      <p class="text" style="margin-bottom: 8px;">
+        <strong style="color: #888888; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Sender:</strong><br>
+        <span style="font-size: 17px; font-weight: 600; color: #ffffff;">${senderName}</span> ${roleBadge}
+      </p>
+      <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #333333;">
+        <p class="text" style="margin-bottom: 2px;">
+          <strong style="color: #888888; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Vehicle Listing:</strong>
+        </p>
+        <p style="font-size: 16px; font-weight: 600; color: #ffffff;">${carName}</p>
+        ${priceHtml}
+      </div>
+      ${snippetHtml}
     </div>
-    <p class="text">Click below to view and respond to the message.</p>
+
+    <p class="text">Click the button below to view the full conversation and send your reply.</p>
+
+    <div style="margin-top: 25px; padding: 14px 18px; background-color: rgba(249, 115, 22, 0.08); border-radius: 8px; border: 1px solid rgba(249, 115, 22, 0.25); font-size: 13px; color: #cccccc; line-height: 1.5;">
+      <strong style="color: #F97316;">🛡️ Safety Reminder:</strong> For your security, keep all communications and payment discussions inside AtlasAutos.
+    </div>
   `;
-  
+
   const mailOptions = {
-    from: `"AtlasAutos" <${process.env.EMAIL_USER}>`,
+    from: `"AtlasAutos Messaging" <${process.env.EMAIL_USER}>`,
     to: email,
-    subject: `New Message from ${senderName} - AtlasAutos`,
-    html: emailTemplate('New Message Received', content, 'View Message', chatLink)
+    subject: `New message from ${senderName} regarding ${carName} - AtlasAutos`,
+    html: emailTemplate('New Message Notification', content, 'View & Reply to Message', chatLink)
   };
-  
+
   await transporter.sendMail(mailOptions);
 };
 

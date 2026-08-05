@@ -176,9 +176,9 @@ export const sendMessage = async (req, res) => {
     
     // Verify user is part of this chat
     const chat = await Chat.findById(chatId)
-      .populate('car', 'brand model year')
+      .populate('car', 'brand model year price')
       .populate('buyer', 'fullName email profilePhoto')
-      .populate('seller', 'fullName email profilePhoto');
+      .populate('seller', 'fullName dealershipName email profilePhoto');
     
     if (!chat) {
       return res.status(404).json({
@@ -218,30 +218,48 @@ export const sendMessage = async (req, res) => {
     }
     
     await chat.save();
-    // Check if we should send email notification (only if last email was > 1 hour ago)
+
+    // Process email notification (with 1-minute anti-spam buffer per conversation)
     const recipient = isBuyer ? chat.seller : chat.buyer;
     const sender = isBuyer ? chat.buyer : chat.seller;
     const recipientUser = await User.findById(recipient._id);
     
-    const lastEmailKey = chatId.toString();
-    const lastEmailTime = recipientUser.lastEmailNotification?.get(lastEmailKey);
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    
-    if (!lastEmailTime || lastEmailTime < oneHourAgo) {
-      try {
-        await sendNewMessageEmail(
-          recipient.email,
-          recipient.fullName,
-          sender.fullName,
-          `${chat.car.year} ${chat.car.brand} ${chat.car.model}`,
-          `${process.env.CLIENT_URL}/chat/${chatId}`
-        );
-        
-        // Update last email notification time
-        recipientUser.lastEmailNotification.set(lastEmailKey, new Date());
-        await recipientUser.save();
-      } catch (emailError) {
-        console.error('Email notification failed:', emailError);
+    if (recipientUser && recipientUser.email) {
+      const lastEmailKey = chatId.toString();
+      const lastEmailTime = recipientUser.lastEmailNotification?.get(lastEmailKey);
+      const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
+      
+      if (!lastEmailTime || lastEmailTime < oneMinuteAgo) {
+        try {
+          const senderName = isBuyer 
+            ? sender.fullName 
+            : (sender.dealershipName || sender.fullName);
+          const senderRole = isBuyer ? 'buyer' : 'seller';
+          const carName = chat.car ? `${chat.car.year} ${chat.car.brand} ${chat.car.model}` : 'Vehicle Listing';
+          const carPriceFormatted = chat.car?.price ? `₦${chat.car.price.toLocaleString()}` : '';
+          const chatLink = recipientUser.role === 'seller'
+            ? `${process.env.CLIENT_URL}/seller/messages`
+            : `${process.env.CLIENT_URL}/chat/${chatId}`;
+
+          await sendNewMessageEmail(
+            recipient.email,
+            recipient.fullName,
+            senderName,
+            carName,
+            chatLink,
+            content.trim(),
+            senderRole,
+            carPriceFormatted
+          );
+          
+          if (!recipientUser.lastEmailNotification) {
+            recipientUser.lastEmailNotification = new Map();
+          }
+          recipientUser.lastEmailNotification.set(lastEmailKey, new Date());
+          await recipientUser.save();
+        } catch (emailError) {
+          console.error('Email notification failed:', emailError);
+        }
       }
     }
     

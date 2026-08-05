@@ -26,7 +26,6 @@ const httpServer = createServer(app);
 // Allowed Origins for CORS
 const allowedOrigins = [
   process.env.CLIENT_URL,
-  'https://atlasautos.vercel.app',
   'https://atlasautos-one.vercel.app',
   'http://localhost:5173',
   'http://localhost:5174',
@@ -100,26 +99,26 @@ const connectedUsers = new Map(); // userId -> socketId
 
 io.on('connection', (socket) => {
   console.log('New client connected:', socket.id);
-  
+
   // User joins with their userId
   socket.on('join', (userId) => {
     connectedUsers.set(userId, socket.id);
     socket.userId = userId;
     console.log(`User ${userId} joined with socket ${socket.id}`);
   });
-  
+
   // Join a chat room
   socket.on('join-chat', (chatId) => {
     socket.join(chatId);
     console.log(`Socket ${socket.id} joined chat room: ${chatId}`);
   });
-  
+
   // Leave a chat room
   socket.on('leave-chat', (chatId) => {
     socket.leave(chatId);
     console.log(`Socket ${socket.id} left chat room: ${chatId}`);
   });
-  
+
   // Handle typing indicator
   socket.on('typing', ({ chatId, isTyping }) => {
     socket.to(chatId).emit('typing', {
@@ -127,37 +126,37 @@ io.on('connection', (socket) => {
       isTyping
     });
   });
-  
+
   // Handle new message
   socket.on('send-message', async (data) => {
     try {
       const { chatId, content, senderId } = data;
       console.log(`[SOCKET] send-message received: chatId=${chatId}, senderId=${senderId}, content="${content}"`);
       console.log(`[SOCKET] socket.userId=${socket.userId}`);
-      
+
       // Verify sender matches socket user
       if (senderId !== socket.userId) {
         console.error(`[SOCKET] UNAUTHORIZED: senderId=${senderId} !== socket.userId=${socket.userId}`);
         socket.emit('error', { message: 'Unauthorized' });
         return;
       }
-      
+
       // Get chat details
       const chat = await Chat.findById(chatId)
         .populate('car', 'brand model year')
         .populate('buyer', 'fullName email profilePhoto')
         .populate('seller', 'fullName email profilePhoto');
-      
+
       if (!chat) {
         console.error(`[SOCKET] Chat not found: ${chatId}`);
         socket.emit('error', { message: 'Chat not found' });
         return;
       }
-      
+
       // Figure out if sender is buyer or seller
       const isBuyer = chat.buyer._id.toString() === senderId;
       console.log(`[SOCKET] isBuyer=${isBuyer}, buyer._id=${chat.buyer._id}, seller._id=${chat.seller._id}`);
-      
+
       console.log('[SOCKET] Saving message to MongoDB...');
       const message = await Message.create({
         chat: chatId,
@@ -167,28 +166,28 @@ io.on('connection', (socket) => {
       });
       const populatedMessage = await Message.findById(message._id).populate('sender', 'fullName profilePhoto');
       console.log('[SOCKET] MongoDB save SUCCESS:', message._id);
-      
+
       // Update chat
       chat.lastMessage = content.trim();
       chat.lastMessageAt = new Date();
       chat.lastMessageSender = senderId;
-      
+
       // Increment unread count for recipient
       if (isBuyer) {
         chat.unreadCountSeller += 1;
       } else {
         chat.unreadCountBuyer += 1;
       }
-      
+
       await chat.save();
-      
+
       // Emit message to all users in the chat room
       io.to(chatId).emit('new-message', populatedMessage);
-      
+
       // Emit updated chat to both users
       const recipientId = isBuyer ? chat.seller._id.toString() : chat.buyer._id.toString();
       const recipientSocketId = connectedUsers.get(recipientId);
-      
+
       if (recipientSocketId) {
         // Recipient is online, update their conversation list
         io.to(recipientSocketId).emit('new-conversation', {
@@ -202,11 +201,11 @@ io.on('connection', (socket) => {
         const recipient = isBuyer ? chat.seller : chat.buyer;
         const sender = isBuyer ? chat.buyer : chat.seller;
         const recipientUser = await User.findById(recipient._id);
-        
+
         const lastEmailKey = chatId.toString();
         const lastEmailTime = recipientUser.lastEmailNotification?.get(lastEmailKey);
         const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-        
+
         if (!lastEmailTime || lastEmailTime < oneHourAgo) {
           try {
             await sendNewMessageEmail(
@@ -216,7 +215,7 @@ io.on('connection', (socket) => {
               `${chat.car.year} ${chat.car.brand} ${chat.car.model}`,
               `${process.env.CLIENT_URL}/chat/${chatId}`
             );
-            
+
             recipientUser.lastEmailNotification.set(lastEmailKey, new Date());
             await recipientUser.save();
           } catch (emailError) {
@@ -224,7 +223,7 @@ io.on('connection', (socket) => {
           }
         }
       }
-      
+
       // Update unread count for recipient
       if (recipientSocketId) {
         const unreadChats = await Chat.find({
@@ -233,21 +232,21 @@ io.on('connection', (socket) => {
             { seller: recipientId, unreadCountSeller: { $gt: 0 } }
           ]
         });
-        
+
         const totalUnread = unreadChats.reduce((sum, c) => {
           const isBuyerRecipient = c.buyer.toString() === recipientId;
           return sum + (isBuyerRecipient ? c.unreadCountBuyer : c.unreadCountSeller);
         }, 0);
-        
+
         io.to(recipientSocketId).emit('unread-count', { count: totalUnread });
       }
-      
+
     } catch (error) {
       console.error('Socket message error:', error);
       socket.emit('error', { message: 'Failed to send message' });
     }
   });
-  
+
   // Handle message read receipt
   socket.on('mark-read', async ({ chatId, userId }) => {
     try {
@@ -263,7 +262,7 @@ io.on('connection', (socket) => {
           chat.unreadCountSeller = 0;
         }
         await chat.save();
-        
+
         // Notify other user that messages were read
         socket.to(chatId).emit('messages-read', { by: userId });
       }
@@ -271,7 +270,7 @@ io.on('connection', (socket) => {
       console.error('Mark read error:', error);
     }
   });
-  
+
   // Handle disconnection
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
