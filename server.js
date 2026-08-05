@@ -198,7 +198,7 @@ io.on('connection', (socket) => {
         });
       }
 
-      // Process email notification (with 1-minute anti-spam buffer per conversation)
+      // Process email notification (with 5-minute anti-spam buffer per conversation)
       const recipient = isBuyer ? chat.seller : chat.buyer;
       const sender = isBuyer ? chat.buyer : chat.seller;
       const recipientUser = await User.findById(recipient._id);
@@ -206,9 +206,9 @@ io.on('connection', (socket) => {
       if (recipientUser && recipientUser.email) {
         const lastEmailKey = chatId.toString();
         const lastEmailTime = recipientUser.lastEmailNotification?.get(lastEmailKey);
-        const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
 
-        if (!lastEmailTime || lastEmailTime < oneMinuteAgo) {
+        if (!lastEmailTime || lastEmailTime < fiveMinutesAgo) {
           try {
             const senderName = isBuyer 
               ? sender.fullName 
@@ -241,7 +241,7 @@ io.on('connection', (socket) => {
             console.error('Email notification failed:', emailError);
           }
         } else {
-          console.log(`[SOCKET EMAIL] Skipped email to ${recipient.email} - sent less than 1 minute ago.`);
+          console.log(`[SOCKET EMAIL] Skipped email to ${recipient.email} - sent less than 5 minutes ago.`);
         }
       }
 

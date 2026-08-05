@@ -219,7 +219,7 @@ export const sendMessage = async (req, res) => {
     
     await chat.save();
 
-    // Process email notification (with 1-minute anti-spam buffer per conversation)
+    // Process email notification (with 5-minute anti-spam buffer per conversation)
     const recipient = isBuyer ? chat.seller : chat.buyer;
     const sender = isBuyer ? chat.buyer : chat.seller;
     const recipientUser = await User.findById(recipient._id);
@@ -227,9 +227,9 @@ export const sendMessage = async (req, res) => {
     if (recipientUser && recipientUser.email) {
       const lastEmailKey = chatId.toString();
       const lastEmailTime = recipientUser.lastEmailNotification?.get(lastEmailKey);
-      const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
       
-      if (!lastEmailTime || lastEmailTime < oneMinuteAgo) {
+      if (!lastEmailTime || lastEmailTime < fiveMinutesAgo) {
         try {
           const senderName = isBuyer 
             ? sender.fullName 
