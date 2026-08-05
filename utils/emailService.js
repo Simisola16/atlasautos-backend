@@ -18,8 +18,8 @@ const getResendClient = () => {
   return new Resend(apiKey);
 };
 
-// Default sender address (uses onboarding@resend.dev for testing unless EMAIL_FROM is customized)
-const getDefaultSender = () => process.env.EMAIL_FROM || 'AtlasAutos <onboarding@resend.dev>';
+// Default sender address (uses atlassync.company domain unless EMAIL_FROM is customized)
+const getDefaultSender = () => process.env.EMAIL_FROM || 'AtlasAutos <notifications@atlassync.company>';
 
 // Send email using Resend SDK
 export const sendEmail = async ({ from, to, subject, html }) => {
