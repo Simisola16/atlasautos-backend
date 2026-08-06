@@ -98,33 +98,25 @@ export const register = async (req, res) => {
     // Create user
     const user = await User.create(userData);
     
-    // Send welcome email
-    try {
-      if (role === 'buyer') {
-        await sendBuyerWelcomeEmail(user.email, user.fullName);
-      } else {
-        await sendSellerWelcomeEmail(user.email, user.fullName, user.dealershipName);
-      }
-    } catch (emailError) {
-      console.error('Email sending failed:', emailError);
-      // Don't fail registration if email fails
+    // Send welcome email asynchronously in background
+    if (role === 'buyer') {
+      sendBuyerWelcomeEmail(user.email, user.fullName).catch(err => console.error('Buyer welcome email failed:', err));
+    } else {
+      sendSellerWelcomeEmail(user.email, user.fullName, user.dealershipName).catch(err => console.error('Seller welcome email failed:', err));
     }
     
     // Generate token
     const token = generateToken(user._id);
     
-    // For sellers, generate 6-digit email verification code and send verification email
+    // For sellers, generate 6-digit email verification code and send verification email asynchronously
     if (role === 'seller') {
       const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
       user.emailVerificationCode = verificationCode;
       user.emailVerificationExpire = Date.now() + 30 * 60 * 1000; // 30 minutes
       await user.save({ validateBeforeSave: false });
       
-      try {
-        await sendVerificationCodeEmail(user.email, user.fullName, verificationCode);
-      } catch (emailError) {
-        console.error('Verification code email sending failed:', emailError);
-      }
+      // Dispatch verification email in background
+      sendVerificationCodeEmail(user.email, user.fullName, verificationCode).catch(err => console.error('Verification code email failed:', err));
       
       return res.status(201).json({
         success: true,
@@ -565,8 +557,8 @@ export const resendVerification = async (req, res) => {
     user.emailVerificationExpire = Date.now() + 30 * 60 * 1000; // 30 minutes
     await user.save({ validateBeforeSave: false });
     
-    // Send verification code email
-    await sendVerificationCodeEmail(user.email, user.fullName, verificationCode);
+    // Send verification code email asynchronously in background
+    sendVerificationCodeEmail(user.email, user.fullName, verificationCode).catch(err => console.error('Verification code email failed:', err));
     
     res.status(200).json({
       success: true,
@@ -642,15 +634,11 @@ export const verifyCode = async (req, res) => {
     user.emailVerificationExpire = undefined;
     await user.save({ validateBeforeSave: false });
     
-    // Send seller welcome email
-    try {
-      if (user.role === 'seller') {
-        await sendSellerWelcomeEmail(user.email, user.fullName, user.dealershipName);
-      } else {
-        await sendBuyerWelcomeEmail(user.email, user.fullName);
-      }
-    } catch (emailError) {
-      console.error('Welcome email failed:', emailError);
+    // Send seller/buyer welcome email asynchronously
+    if (user.role === 'seller') {
+      sendSellerWelcomeEmail(user.email, user.fullName, user.dealershipName).catch(err => console.error('Welcome email failed:', err));
+    } else {
+      sendBuyerWelcomeEmail(user.email, user.fullName).catch(err => console.error('Welcome email failed:', err));
     }
     
     const token = generateToken(user._id);
