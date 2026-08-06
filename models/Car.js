@@ -267,5 +267,21 @@ carSchema.post(['find', 'findOne', 'findOneAndUpdate'], function(docs) {
   sanitizeCarDocs(docs);
 });
 
+carSchema.set('toJSON', {
+  virtuals: true,
+  transform: (doc, ret) => {
+    sanitizeCarDocs(ret);
+    return ret;
+  }
+});
+
+carSchema.set('toObject', {
+  virtuals: true,
+  transform: (doc, ret) => {
+    sanitizeCarDocs(ret);
+    return ret;
+  }
+});
+
 const Car = mongoose.model('Car', carSchema);
 export default Car;
