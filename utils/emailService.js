@@ -1,6 +1,7 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -8,7 +9,7 @@ const __dirname = path.dirname(__filename);
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
-// Lazy getter for Resend client to prevent startup crash if RESEND_API_KEY is missing
+// Lazy getter for Resend client
 const getResendClient = () => {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
@@ -18,36 +19,71 @@ const getResendClient = () => {
   return new Resend(apiKey);
 };
 
-// Default sender address (uses atlassync.company domain unless EMAIL_FROM is customized)
+// Lazy getter for Nodemailer SMTP transporter (fallback mechanism)
+const getNodemailerTransporter = () => {
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) return null;
+  const passClean = process.env.EMAIL_PASS.replace(/\s+/g, '');
+  return nodemailer.createTransport({
+    service: 'gmail',
+    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.EMAIL_PORT || '587'),
+    secure: false,
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: passClean
+    }
+  });
+};
+
+// Default sender address
 const getDefaultSender = () => process.env.EMAIL_FROM || 'AtlasAutos <notifications@atlassync.company>';
 
-// Send email using Resend SDK
+// Send email using Resend SDK with automatic Nodemailer SMTP fallback
 export const sendEmail = async ({ from, to, subject, html }) => {
+  // 1. Attempt sending via Resend SDK
   try {
     const resend = getResendClient();
-    if (!resend) {
-      console.error('[Resend Error] Cannot send email: RESEND_API_KEY environment variable is missing.');
+    if (resend) {
+      const sender = from || getDefaultSender();
+      console.log(`[Resend Sending Email] From: ${sender} | To: ${to} | Subject: ${subject}`);
+      const { data, error } = await resend.emails.send({
+        from: sender,
+        to: Array.isArray(to) ? to : [to],
+        subject,
+        html
+      });
+
+      if (!error && data) {
+        console.log(`[Resend Email Dispatch SUCCESS] Message ID: ${data?.id} | Sent To: ${to}`);
+        return data;
+      }
+      console.warn('[Resend Email API Warning - Falling back to Nodemailer]:', error ? JSON.stringify(error, null, 2) : 'No data returned');
+    }
+  } catch (error) {
+    console.warn('[Resend Email Exception - Falling back to Nodemailer]:', error.message);
+  }
+
+  // 2. Fallback to Nodemailer SMTP
+  try {
+    const transporter = getNodemailerTransporter();
+    if (!transporter) {
+      console.error('[Email Error] Neither Resend nor Nodemailer (EMAIL_USER/EMAIL_PASS) is configured.');
       return null;
     }
 
-    const sender = from || getDefaultSender();
-    console.log(`[Resend Sending Email] From: ${sender} | To: ${to} | Subject: ${subject}`);
-    const { data, error } = await resend.emails.send({
+    const sender = from || `"AtlasAutos" <${process.env.EMAIL_USER}>`;
+    console.log(`[Nodemailer Sending Email] From: ${sender} | To: ${to} | Subject: ${subject}`);
+    const info = await transporter.sendMail({
       from: sender,
-      to: Array.isArray(to) ? to : [to],
+      to: Array.isArray(to) ? to.join(', ') : to,
       subject,
       html
     });
 
-    if (error) {
-      console.error('[Resend Email API Error]:', JSON.stringify(error, null, 2));
-      return null;
-    }
-
-    console.log(`[Resend Email Dispatch SUCCESS] Message ID: ${data?.id} | Sent To: ${to}`);
-    return data;
-  } catch (error) {
-    console.error('[Resend Email Exception]:', error.message);
+    console.log(`[Nodemailer Email Dispatch SUCCESS] Message ID: ${info.messageId} | Sent To: ${to}`);
+    return { id: info.messageId };
+  } catch (nmError) {
+    console.error('[Nodemailer Email Exception]:', nmError.message);
     return null;
   }
 };

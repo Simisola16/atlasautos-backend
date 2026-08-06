@@ -219,42 +219,44 @@ export const sendMessage = async (req, res) => {
     
     await chat.save();
 
-    // Process email notification immediately for every message (instant delivery mode for testing)
-    const recipient = isBuyer ? chat.seller : chat.buyer;
-    const sender = isBuyer ? chat.buyer : chat.seller;
-    const recipientUser = await User.findById(recipient._id);
-    
-    if (recipientUser && recipientUser.email) {
-      try {
-        const senderName = isBuyer 
-          ? sender.fullName 
-          : (sender.dealershipName || sender.fullName);
-        const senderRole = isBuyer ? 'buyer' : 'seller';
-        const carName = chat.car ? `${chat.car.year} ${chat.car.brand} ${chat.car.model}` : 'Vehicle Listing';
-        const carPriceFormatted = chat.car?.price ? `₦${chat.car.price.toLocaleString()}` : '';
-        const chatLink = recipientUser.role === 'seller'
-          ? `${process.env.CLIENT_URL}/seller/messages`
-          : `${process.env.CLIENT_URL}/chat/${chatId}`;
+    // Process email notification immediately for every message
+    if (chat.buyer && chat.seller) {
+      const recipient = isBuyer ? chat.seller : chat.buyer;
+      const sender = isBuyer ? chat.buyer : chat.seller;
+      const recipientUser = await User.findById(recipient._id || recipient);
+      
+      if (recipientUser && recipientUser.email) {
+        try {
+          const senderName = isBuyer 
+            ? (sender.fullName || 'A buyer') 
+            : (sender.dealershipName || sender.fullName || 'A seller');
+          const senderRole = isBuyer ? 'buyer' : 'seller';
+          const carName = chat.car ? `${chat.car.year} ${chat.car.brand} ${chat.car.model}` : 'Vehicle Listing';
+          const carPriceFormatted = chat.car?.price ? `₦${chat.car.price.toLocaleString()}` : '';
+          const chatLink = recipientUser.role === 'seller'
+            ? `${process.env.CLIENT_URL}/seller/messages`
+            : `${process.env.CLIENT_URL}/chat/${chatId}`;
 
-        console.log(`[HTTP EMAIL] Instant dispatching Resend email to ${recipient.email} from ${senderName}...`);
-        await sendNewMessageEmail(
-          recipient.email,
-          recipient.fullName,
-          senderName,
-          carName,
-          chatLink,
-          content.trim(),
-          senderRole,
-          carPriceFormatted
-        );
-        
-        if (!recipientUser.lastEmailNotification) {
-          recipientUser.lastEmailNotification = new Map();
+          console.log(`[HTTP EMAIL] Dispatching email notification to ${recipientUser.email} from ${senderName}...`);
+          await sendNewMessageEmail(
+            recipientUser.email,
+            recipientUser.fullName || 'User',
+            senderName,
+            carName,
+            chatLink,
+            content.trim(),
+            senderRole,
+            carPriceFormatted
+          );
+          
+          if (!recipientUser.lastEmailNotification) {
+            recipientUser.lastEmailNotification = new Map();
+          }
+          recipientUser.lastEmailNotification.set(chatId.toString(), new Date());
+          await recipientUser.save();
+        } catch (emailError) {
+          console.error('Email notification failed:', emailError);
         }
-        recipientUser.lastEmailNotification.set(chatId.toString(), new Date());
-        await recipientUser.save();
-      } catch (emailError) {
-        console.error('Email notification failed:', emailError);
       }
     }
     
