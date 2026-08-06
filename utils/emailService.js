@@ -38,6 +38,9 @@ const getNodemailerTransporter = () => {
 // Default sender address
 const getDefaultSender = () => process.env.EMAIL_FROM || 'AtlasAutos <notifications@atlassync.company>';
 
+// Frontend Client URL
+const getClientUrl = () => process.env.CLIENT_URL || 'https://atlasautos-one.vercel.app';
+
 // Send email using Resend SDK with automatic Nodemailer SMTP fallback
 export const sendEmail = async ({ from, to, subject, html }) => {
   // 1. Attempt sending via Resend SDK
@@ -164,7 +167,7 @@ export const sendBuyerWelcomeEmail = async (email, name) => {
   await sendEmail({
     to: email,
     subject: 'Welcome to AtlasAutos - Your Car Search Starts Here!',
-    html: emailTemplate('Welcome to AtlasAutos!', content, 'Browse Cars', `${process.env.CLIENT_URL}/browse`)
+    html: emailTemplate('Welcome to AtlasAutos!', content, 'Browse Cars', `${getClientUrl()}/browse`)
   });
 };
 
@@ -189,13 +192,13 @@ export const sendSellerWelcomeEmail = async (email, name, dealershipName) => {
   await sendEmail({
     to: email,
     subject: 'Welcome to AtlasAutos - Start Selling Cars Today!',
-    html: emailTemplate('Welcome to AtlasAutos!', content, 'Go to Dashboard', `${process.env.CLIENT_URL}/seller/dashboard`)
+    html: emailTemplate('Welcome to AtlasAutos!', content, 'Go to Dashboard', `${getClientUrl()}/seller/dashboard`)
   });
 };
 
 // Send password reset email
 export const sendPasswordResetEmail = async (email, name, resetToken) => {
-  const resetLink = `${process.env.CLIENT_URL}/reset-password?token=${resetToken}`;
+  const resetLink = `${getClientUrl()}/reset-password?token=${resetToken}`;
   
   const content = `
     <p class="text">Hello ${name},</p>
@@ -292,7 +295,7 @@ export const sendListingPublishedEmail = async (email, sellerName, carDetails) =
   await sendEmail({
     to: email,
     subject: 'Your Car Listing is Now Live! - AtlasAutos',
-    html: emailTemplate('Listing Published Successfully', content, 'View My Listings', `${process.env.CLIENT_URL}/seller/listings`)
+    html: emailTemplate('Listing Published Successfully', content, 'View My Listings', `${getClientUrl()}/seller/listings`)
   });
 };
 
@@ -320,7 +323,7 @@ export const sendVerificationCodeEmail = async (email, name, code) => {
 
 // Send email verification link for sellers
 export const sendVerificationEmail = async (email, name, verificationToken) => {
-  const verifyLink = `${process.env.CLIENT_URL}/verify-email?token=${verificationToken}`;
+  const verifyLink = `${getClientUrl()}/verify-email?token=${verificationToken}`;
   
   const content = `
     <p class="text">Hello ${name},</p>

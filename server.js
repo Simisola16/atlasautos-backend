@@ -216,9 +216,10 @@ io.on('connection', (socket) => {
             const senderRole = isBuyer ? 'buyer' : 'seller';
             const carName = chat.car ? `${chat.car.year} ${chat.car.brand} ${chat.car.model}` : 'Vehicle Listing';
             const carPriceFormatted = chat.car?.price ? `₦${chat.car.price.toLocaleString()}` : '';
+            const clientBaseUrl = process.env.CLIENT_URL || 'https://atlasautos-one.vercel.app';
             const chatLink = recipientUser.role === 'seller'
-              ? `${process.env.CLIENT_URL}/seller/messages`
-              : `${process.env.CLIENT_URL}/chat/${chatId}`;
+              ? `${clientBaseUrl}/seller/messages`
+              : `${clientBaseUrl}/chat/${chatId}`;
 
             console.log(`[SOCKET EMAIL] Dispatching email notification to ${recipientUser.email} from ${senderName}...`);
             await sendNewMessageEmail(
