@@ -11,51 +11,51 @@ const cleanDatabase = async () => {
     await mongoose.connect(process.env.MONGO_URI, { dbName: 'atlasautos' });
     console.log('Connected to MongoDB successfully.');
 
-    // 1. Clean Cars
-    const cars = await Car.find({});
-    console.log(`Found ${cars.length} cars. Checking for legacy Supabase URLs...`);
+    // 1. Clean Cars in raw MongoDB collection
+    const cars = await Car.collection.find({}).toArray();
+    console.log(`Found ${cars.length} cars in collection. Checking for legacy Supabase URLs...`);
 
     let updatedCarsCount = 0;
     for (const car of cars) {
-      let modified = false;
+      const updateFields = {};
 
-      if (car.coverPhoto && car.coverPhoto.includes('supabase.co')) {
-        car.coverPhoto = '/assets/luxury_gwagon.png';
-        modified = true;
+      if (car.coverPhoto && typeof car.coverPhoto === 'string' && car.coverPhoto.includes('supabase.co')) {
+        updateFields.coverPhoto = '/assets/luxury_gwagon.png';
       }
 
       if (Array.isArray(car.photos) && car.photos.length > 0) {
+        let photoModified = false;
         const cleanedPhotos = car.photos.map(photo => {
           if (typeof photo === 'string' && photo.includes('supabase.co')) {
-            modified = true;
+            photoModified = true;
             return '/assets/luxury_gwagon.png';
           }
           return photo;
         });
-        if (modified) car.photos = cleanedPhotos;
+        if (photoModified) {
+          updateFields.photos = cleanedPhotos;
+        }
       }
 
       if (car.inspectionReport && typeof car.inspectionReport === 'string' && car.inspectionReport.includes('supabase.co')) {
-        car.inspectionReport = '';
-        modified = true;
+        updateFields.inspectionReport = '';
       }
 
-      if (modified) {
-        await car.save();
+      if (Object.keys(updateFields).length > 0) {
+        await Car.collection.updateOne({ _id: car._id }, { $set: updateFields });
         updatedCarsCount++;
       }
     }
     console.log(`Updated ${updatedCarsCount} car documents in MongoDB.`);
 
-    // 2. Clean Users
-    const users = await User.find({});
-    console.log(`Found ${users.length} users. Checking for legacy Supabase profile photos...`);
+    // 2. Clean Users in raw MongoDB collection
+    const users = await User.collection.find({}).toArray();
+    console.log(`Found ${users.length} users in collection. Checking for legacy Supabase profile photos...`);
 
     let updatedUsersCount = 0;
     for (const user of users) {
       if (user.profilePhoto && typeof user.profilePhoto === 'string' && user.profilePhoto.includes('supabase.co')) {
-        user.profilePhoto = '';
-        await user.save();
+        await User.collection.updateOne({ _id: user._id }, { $set: { profilePhoto: '' } });
         updatedUsersCount++;
       }
     }
