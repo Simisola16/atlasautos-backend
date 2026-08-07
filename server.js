@@ -202,46 +202,47 @@ io.on('connection', (socket) => {
         });
       }
 
-      // Process email notification immediately for every message
+      // Process email notification asynchronously in background for every message
       if (chat.buyer && chat.seller) {
         const recipient = isBuyer ? chat.seller : chat.buyer;
         const sender = isBuyer ? chat.buyer : chat.seller;
-        const recipientUser = await User.findById(recipient._id || recipient);
 
-        if (recipientUser && recipientUser.email) {
-          try {
-            const senderName = isBuyer 
-              ? (sender.fullName || 'A buyer') 
-              : (sender.dealershipName || sender.fullName || 'A seller');
-            const senderRole = isBuyer ? 'buyer' : 'seller';
-            const carName = chat.car ? `${chat.car.year} ${chat.car.brand} ${chat.car.model}` : 'Vehicle Listing';
-            const carPriceFormatted = chat.car?.price ? `₦${chat.car.price.toLocaleString()}` : '';
-            const clientBaseUrl = process.env.CLIENT_URL || 'https://atlasautos-one.vercel.app';
-            const chatLink = recipientUser.role === 'seller'
-              ? `${clientBaseUrl}/seller/messages`
-              : `${clientBaseUrl}/chat/${chatId}`;
+        User.findById(recipient._id || recipient).then(async (recipientUser) => {
+          if (recipientUser && recipientUser.email) {
+            try {
+              const senderName = isBuyer 
+                ? (sender.fullName || 'A buyer') 
+                : (sender.dealershipName || sender.fullName || 'A seller');
+              const senderRole = isBuyer ? 'buyer' : 'seller';
+              const carName = chat.car ? `${chat.car.year} ${chat.car.brand} ${chat.car.model}` : 'Vehicle Listing';
+              const carPriceFormatted = chat.car?.price ? `₦${chat.car.price.toLocaleString()}` : '';
+              const clientBaseUrl = process.env.CLIENT_URL || 'https://atlasautos-one.vercel.app';
+              const chatLink = recipientUser.role === 'seller'
+                ? `${clientBaseUrl}/seller/messages`
+                : `${clientBaseUrl}/chat/${chatId}`;
 
-            console.log(`[SOCKET EMAIL] Dispatching email notification to ${recipientUser.email} from ${senderName}...`);
-            await sendNewMessageEmail(
-              recipientUser.email,
-              recipientUser.fullName || 'User',
-              senderName,
-              carName,
-              chatLink,
-              content.trim(),
-              senderRole,
-              carPriceFormatted
-            );
+              console.log(`[SOCKET EMAIL] Dispatching email notification to ${recipientUser.email} from ${senderName}...`);
+              sendNewMessageEmail(
+                recipientUser.email,
+                recipientUser.fullName || 'User',
+                senderName,
+                carName,
+                chatLink,
+                content.trim(),
+                senderRole,
+                carPriceFormatted
+              ).catch(emailError => console.error('Email notification failed:', emailError));
 
-            if (!recipientUser.lastEmailNotification) {
-              recipientUser.lastEmailNotification = new Map();
+              if (!recipientUser.lastEmailNotification) {
+                recipientUser.lastEmailNotification = new Map();
+              }
+              recipientUser.lastEmailNotification.set(chatId.toString(), new Date());
+              await recipientUser.save();
+            } catch (emailError) {
+              console.error('Email notification error:', emailError);
             }
-            recipientUser.lastEmailNotification.set(chatId.toString(), new Date());
-            await recipientUser.save();
-          } catch (emailError) {
-            console.error('Email notification failed:', emailError);
           }
-        }
+        }).catch(err => console.error('Socket recipient lookup error:', err));
       }
 
       // Update unread count for recipient
