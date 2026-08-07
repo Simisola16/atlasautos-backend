@@ -95,56 +95,28 @@ export const register = async (req, res) => {
       userData.yearsInBusiness = yearsInBusiness;
     }
     
-    // Create user
-    const user = await User.create(userData);
+    // Generate 6-digit email verification code for all registering users
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    user.emailVerificationCode = verificationCode;
+    user.emailVerificationExpire = Date.now() + 30 * 60 * 1000; // 30 minutes
+    user.isEmailVerified = false;
+    await user.save({ validateBeforeSave: false });
     
-    // Send welcome email asynchronously in background
-    if (role === 'buyer') {
-      sendBuyerWelcomeEmail(user.email, user.fullName).catch(err => console.error('Buyer welcome email failed:', err));
-    } else {
-      sendSellerWelcomeEmail(user.email, user.fullName, user.dealershipName).catch(err => console.error('Seller welcome email failed:', err));
-    }
+    // Dispatch 6-digit verification code email in background
+    console.log(`[AUTH] Dispatching verification code ${verificationCode} to ${user.email}...`);
+    sendVerificationCodeEmail(user.email, user.fullName, verificationCode)
+      .then(result => console.log(`[AUTH] Verification code email sent to ${user.email}, result:`, result))
+      .catch(err => console.error('[AUTH] Verification code email failed:', err));
     
-    // Generate token
+    // Generate JWT token
     const token = generateToken(user._id);
     
-    // For sellers, generate 6-digit email verification code and send verification email asynchronously
-    if (role === 'seller') {
-      const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-      user.emailVerificationCode = verificationCode;
-      user.emailVerificationExpire = Date.now() + 30 * 60 * 1000; // 30 minutes
-      await user.save({ validateBeforeSave: false });
-      
-      // Dispatch verification email in background
-      sendVerificationCodeEmail(user.email, user.fullName, verificationCode).catch(err => console.error('Verification code email failed:', err));
-      
-      return res.status(201).json({
-        success: true,
-        message: 'Account created! Please check your email for your 6-digit verification code.',
-        token,
-        requiresVerification: true,
-        email: user.email,
-        user: {
-          id: user._id,
-          fullName: user.fullName,
-          email: user.email,
-          phoneNumber: user.phoneNumber,
-          profilePhoto: user.profilePhoto,
-          state: user.state,
-          city: user.city,
-          role: user.role,
-          dealershipName: user.dealershipName,
-          isVerified: user.isVerified,
-          isEmailVerified: false,
-          createdAt: user.createdAt
-        }
-      });
-    }
-    
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
-      message: 'Account created successfully! Check your email.',
+      message: 'Account created! Please check your email for your 6-digit verification code.',
       token,
+      requiresVerification: true,
+      email: user.email,
       user: {
         id: user._id,
         fullName: user.fullName,
@@ -156,7 +128,7 @@ export const register = async (req, res) => {
         role: user.role,
         dealershipName: user.dealershipName,
         isVerified: user.isVerified,
-        isEmailVerified: true,
+        isEmailVerified: false,
         createdAt: user.createdAt
       }
     });
