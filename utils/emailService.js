@@ -38,57 +38,58 @@ const getNodemailerTransporter = () => {
 };
 
 // Default sender address
-const getDefaultSender = () => process.env.EMAIL_FROM || 'AtlasAutos <notifications@atlassync.company>';
+const getDefaultSender = () => process.env.EMAIL_FROM || 'AtlasAutos <onboarding@resend.dev>';
 
 // Frontend Client URL
 const getClientUrl = () => process.env.CLIENT_URL || 'https://atlasautos-one.vercel.app';
 
-// Send email using Resend SDK with automatic Nodemailer SMTP fallback
+// Send email using Resend SDK exclusively
 export const sendEmail = async ({ from, to, subject, html }) => {
-  // 1. Attempt sending via Resend SDK
-  try {
-    const resend = getResendClient();
-    if (resend) {
-      const sender = from || getDefaultSender();
-      console.log(`[Resend Sending Email] From: ${sender} | To: ${to} | Subject: ${subject}`);
-      const { data, error } = await resend.emails.send({
-        from: sender,
-        to: Array.isArray(to) ? to : [to],
-        subject,
-        html
-      });
-
-      if (!error && data) {
-        console.log(`[Resend Email Dispatch SUCCESS] Message ID: ${data?.id} | Sent To: ${to}`);
-        return data;
-      }
-      console.warn('[Resend Email API Warning - Falling back to Nodemailer]:', error ? JSON.stringify(error, null, 2) : 'No data returned');
-    }
-  } catch (error) {
-    console.warn('[Resend Email Exception - Falling back to Nodemailer]:', error.message);
+  const resend = getResendClient();
+  if (!resend) {
+    console.error('[Resend Email Error] RESEND_API_KEY is not defined.');
+    return null;
   }
 
-  // 2. Fallback to Nodemailer SMTP
-  try {
-    const transporter = getNodemailerTransporter();
-    if (!transporter) {
-      console.error('[Email Error] Neither Resend nor Nodemailer (EMAIL_USER/EMAIL_PASS) is configured.');
-      return null;
-    }
+  const primarySender = from || getDefaultSender();
+  const recipientList = Array.isArray(to) ? to : [to];
 
-    const sender = from || `"AtlasAutos" <${process.env.EMAIL_USER}>`;
-    console.log(`[Nodemailer Sending Email] From: ${sender} | To: ${to} | Subject: ${subject}`);
-    const info = await transporter.sendMail({
-      from: sender,
-      to: Array.isArray(to) ? to.join(', ') : to,
+  try {
+    console.log(`[Resend Sending Email] From: ${primarySender} | To: ${to} | Subject: ${subject}`);
+    const { data, error } = await resend.emails.send({
+      from: primarySender,
+      to: recipientList,
       subject,
       html
     });
 
-    console.log(`[Nodemailer Email Dispatch SUCCESS] Message ID: ${info.messageId} | Sent To: ${to}`);
-    return { id: info.messageId };
-  } catch (nmError) {
-    console.error('[Nodemailer Email Exception]:', nmError.message);
+    if (!error && data) {
+      console.log(`[Resend Email Dispatch SUCCESS] Message ID: ${data.id} | Sent To: ${to}`);
+      return data;
+    }
+
+    console.warn('[Resend API Error with Primary Sender]:', error);
+
+    // If primary sender failed (e.g. unverified domain), retry with Resend sandbox sender
+    if (primarySender !== 'AtlasAutos <onboarding@resend.dev>') {
+      console.log(`[Resend Retry] Retrying with default sandbox sender onboarding@resend.dev...`);
+      const retryResult = await resend.emails.send({
+        from: 'AtlasAutos <onboarding@resend.dev>',
+        to: recipientList,
+        subject,
+        html
+      });
+
+      if (!retryResult.error && retryResult.data) {
+        console.log(`[Resend Email Dispatch SUCCESS (Sandbox Sender)] Message ID: ${retryResult.data.id} | Sent To: ${to}`);
+        return retryResult.data;
+      }
+      console.error('[Resend Retry Error]:', retryResult.error);
+    }
+
+    return null;
+  } catch (error) {
+    console.error('[Resend Exception]:', error.message);
     return null;
   }
 };
