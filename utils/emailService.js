@@ -28,6 +28,8 @@ const getNodemailerTransporter = () => {
     host: process.env.EMAIL_HOST || 'smtp.gmail.com',
     port: parseInt(process.env.EMAIL_PORT || '587'),
     secure: false,
+    connectionTimeout: 5000,
+    socketTimeout: 5000,
     auth: {
       user: process.env.EMAIL_USER,
       pass: passClean

@@ -6,7 +6,19 @@ const storage = multer.memoryStorage();
 
 // File filter
 const fileFilter = (req, file, cb) => {
-  // Accept images only
+  if (file.fieldname === 'inspectionReport') {
+    const allowedTypes = /jpeg|jpg|png|webp|gif|pdf/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = file.mimetype === 'application/pdf' || /image\/(jpeg|jpg|png|webp|gif)/.test(file.mimetype);
+    
+    if (extname && mimetype) {
+      return cb(null, true);
+    } else {
+      return cb(new Error('Only images (jpeg, jpg, png, webp, gif) and PDF files are allowed for inspection reports'), false);
+    }
+  }
+
+  // Accept images only for other fields
   const allowedTypes = /jpeg|jpg|png|webp|gif/;
   const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
   const mimetype = allowedTypes.test(file.mimetype);

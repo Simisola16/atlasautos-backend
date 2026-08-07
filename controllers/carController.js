@@ -61,19 +61,20 @@ export const createCar = async (req, res) => {
     // Create car
     const car = await Car.create(carData);
     
-    // Send confirmation email to seller
-    try {
-      const seller = await User.findById(req.user.id);
-      await sendListingPublishedEmail(seller.email, seller.fullName, {
-        year: car.year,
-        brand: car.brand,
-        model: car.model,
-        price: car.formattedPrice,
-        condition: car.condition
-      });
-    } catch (emailError) {
-      console.error('Listing email failed:', emailError);
-    }
+    // Send confirmation email to seller asynchronously (non-blocking)
+    User.findById(req.user.id)
+      .then(seller => {
+        if (seller && seller.email) {
+          sendListingPublishedEmail(seller.email, seller.fullName, {
+            year: car.year,
+            brand: car.brand,
+            model: car.model,
+            price: car.formattedPrice,
+            condition: car.condition
+          }).catch(emailError => console.error('Listing email failed:', emailError));
+        }
+      })
+      .catch(emailError => console.error('Listing email seller lookup failed:', emailError));
     
     res.status(201).json({
       success: true,
