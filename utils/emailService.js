@@ -38,7 +38,7 @@ const getNodemailerTransporter = () => {
 };
 
 // Default sender address
-const getDefaultSender = () => process.env.EMAIL_FROM || 'AtlasAutos <onboarding@resend.dev>';
+const getDefaultSender = () => process.env.EMAIL_FROM || 'AtlasAutos <notifications@atlassync.company>';
 
 // Frontend Client URL
 const getClientUrl = () => process.env.CLIENT_URL || 'https://atlasautos-one.vercel.app';
