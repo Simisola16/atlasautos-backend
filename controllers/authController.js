@@ -97,10 +97,12 @@ export const register = async (req, res) => {
     
     // Generate 6-digit email verification code for all registering users
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-    user.emailVerificationCode = verificationCode;
-    user.emailVerificationExpire = Date.now() + 30 * 60 * 1000; // 30 minutes
-    user.isEmailVerified = false;
-    await user.save({ validateBeforeSave: false });
+    userData.emailVerificationCode = verificationCode;
+    userData.emailVerificationExpire = Date.now() + 30 * 60 * 1000; // 30 minutes
+    userData.isEmailVerified = false;
+    
+    // Create user in MongoDB
+    const user = await User.create(userData);
     
     // Dispatch 6-digit verification code email in background
     console.log(`[AUTH] Dispatching verification code ${verificationCode} to ${user.email}...`);
