@@ -104,11 +104,14 @@ export const register = async (req, res) => {
     // Create user in MongoDB
     const user = await User.create(userData);
     
-    // Dispatch 6-digit verification code email in background
-    console.log(`[AUTH] Dispatching verification code ${verificationCode} to ${user.email}...`);
-    sendVerificationCodeEmail(user.email, user.fullName, verificationCode)
-      .then(result => console.log(`[AUTH] Verification code email sent to ${user.email}, result:`, result))
-      .catch(err => console.error('[AUTH] Verification code email failed:', err));
+    // Dispatch 6-digit verification code email
+    try {
+      console.log(`[AUTH] Dispatching verification code ${verificationCode} to ${user.email}...`);
+      await sendVerificationCodeEmail(user.email, user.fullName, verificationCode);
+      console.log(`[AUTH] Verification code email sent to ${user.email}`);
+    } catch (emailErr) {
+      console.error('[AUTH] Verification code email error:', emailErr);
+    }
     
     // Generate JWT token
     const token = generateToken(user._id);
@@ -531,8 +534,12 @@ export const resendVerification = async (req, res) => {
     user.emailVerificationExpire = Date.now() + 30 * 60 * 1000; // 30 minutes
     await user.save({ validateBeforeSave: false });
     
-    // Send verification code email asynchronously in background
-    sendVerificationCodeEmail(user.email, user.fullName, verificationCode).catch(err => console.error('Verification code email failed:', err));
+    // Send verification code email
+    try {
+      await sendVerificationCodeEmail(user.email, user.fullName, verificationCode);
+    } catch (emailErr) {
+      console.error('Verification code email resend failed:', emailErr);
+    }
     
     res.status(200).json({
       success: true,
