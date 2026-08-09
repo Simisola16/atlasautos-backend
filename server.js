@@ -98,6 +98,7 @@ app.get('/api/health', (req, res) => {
 app.get('/api/debug-env', (req, res) => {
   res.status(200).json({
     RESEND_API_KEY: !!process.env.RESEND_API_KEY,
+    RESEND_API_KEY_prefix: process.env.RESEND_API_KEY ? process.env.RESEND_API_KEY.substring(0, 8) : 'NOT SET',
     EMAIL_FROM: process.env.EMAIL_FROM || 'NOT SET',
     EMAIL_USER: !!process.env.EMAIL_USER,
     EMAIL_PASS: !!process.env.EMAIL_PASS,
@@ -105,6 +106,26 @@ app.get('/api/debug-env', (req, res) => {
     MONGO_URI: !!process.env.MONGO_URI,
     NODE_ENV: process.env.NODE_ENV || 'NOT SET',
   });
+});
+
+// Temporary test-email endpoint — fires a real email and reports success/failure
+app.get('/api/test-email', async (req, res) => {
+  try {
+    const { sendEmail } = await import('./utils/emailService.js');
+    const to = req.query.to || 'atlassync1@gmail.com';
+    const result = await sendEmail({
+      to,
+      subject: '[AtlasAutos] Live Email Test from Render',
+      html: '<h2>Email Test</h2><p>If you see this, email is working on Render!</p>'
+    });
+    if (result) {
+      res.json({ success: true, message: `Email sent successfully to ${to}`, id: result.id });
+    } else {
+      res.status(500).json({ success: false, message: 'sendEmail returned null — check Render logs for error details' });
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Socket.io connection handling
