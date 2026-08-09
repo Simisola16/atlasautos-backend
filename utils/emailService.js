@@ -7,29 +7,29 @@ import dotenv from 'dotenv';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Load .env from the root directory
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
 // Lazy getter for Resend client
 const getResendClient = () => {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
-    console.warn('[Resend Warning] RESEND_API_KEY environment variable is not defined.');
+    console.error('[Email Error] RESEND_API_KEY is missing');
     return null;
   }
   return new Resend(apiKey);
 };
 
-// Lazy getter for Nodemailer SMTP transporter (fallback mechanism)
+// Lazy getter for Nodemailer SMTP transporter
 const getNodemailerTransporter = () => {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) return null;
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    console.warn('[Email Warning] SMTP credentials missing for fallback');
+    return null;
+  }
+  // Gmail app passwords are sometimes formatted with spaces — strip them
   const passClean = process.env.EMAIL_PASS.replace(/\s+/g, '');
   return nodemailer.createTransport({
     service: 'gmail',
-    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.EMAIL_PORT || '587'),
-    secure: false,
-    connectionTimeout: 5000,
-    socketTimeout: 5000,
     auth: {
       user: process.env.EMAIL_USER,
       pass: passClean
@@ -38,60 +38,65 @@ const getNodemailerTransporter = () => {
 };
 
 // Default sender address
-const getDefaultSender = () => process.env.EMAIL_FROM || 'AtlasAutos <notifications@atlassync.company>';
+const getDefaultSender = () => process.env.EMAIL_FROM || 'notifications@atlassync.company';
 
 // Frontend Client URL
 const getClientUrl = () => process.env.CLIENT_URL || 'https://atlasautos-one.vercel.app';
 
-// Send email using Resend SDK exclusively
+// Send email with Resend primary, Gmail SMTP as real fallback
 export const sendEmail = async ({ from, to, subject, html }) => {
   const resend = getResendClient();
-  if (!resend) {
-    console.error('[Resend Email Error] RESEND_API_KEY is not defined.');
-    return null;
-  }
-
   const primarySender = from || getDefaultSender();
   const recipientList = Array.isArray(to) ? to : [to];
 
-  try {
-    console.log(`[Resend Sending Email] From: ${primarySender} | To: ${to} | Subject: ${subject}`);
-    const { data, error } = await resend.emails.send({
-      from: primarySender,
-      to: recipientList,
-      subject,
-      html
-    });
-
-    if (!error && data) {
-      console.log(`[Resend Email Dispatch SUCCESS] Message ID: ${data.id} | Sent To: ${to}`);
-      return data;
-    }
-
-    console.warn('[Resend API Error with Primary Sender]:', error);
-
-    // If primary sender failed (e.g. unverified domain), retry with Resend sandbox sender
-    if (primarySender !== 'AtlasAutos <onboarding@resend.dev>') {
-      console.log(`[Resend Retry] Retrying with default sandbox sender onboarding@resend.dev...`);
-      const retryResult = await resend.emails.send({
-        from: 'AtlasAutos <onboarding@resend.dev>',
+  // --- PRIMARY: Try Resend ---
+  if (resend) {
+    try {
+      console.log(`[Email] Resend attempt | From: ${primarySender} | To: ${to} | Subject: ${subject}`);
+      const { data, error } = await resend.emails.send({
+        from: primarySender,
         to: recipientList,
         subject,
         html
       });
 
-      if (!retryResult.error && retryResult.data) {
-        console.log(`[Resend Email Dispatch SUCCESS (Sandbox Sender)] Message ID: ${retryResult.data.id} | Sent To: ${to}`);
-        return retryResult.data;
+      if (!error && data) {
+        console.log(`[Email] Resend SUCCESS | ID: ${data.id} | To: ${to}`);
+        return data;
       }
-      console.error('[Resend Retry Error]:', retryResult.error);
-    }
 
-    return null;
-  } catch (error) {
-    console.error('[Resend Exception]:', error.message);
-    return null;
+      // Log the full Resend error — this shows in Vercel logs
+      console.error(`[Email] Resend FAILED | To: ${to} | Error:`, JSON.stringify(error));
+    } catch (err) {
+      console.error(`[Email] Resend EXCEPTION | To: ${to} |`, err.message);
+    }
+  } else {
+    console.warn('[Email] Resend unavailable — RESEND_API_KEY missing.');
   }
+
+  // --- FALLBACK: Gmail SMTP via Nodemailer ---
+  const transporter = getNodemailerTransporter();
+  if (transporter) {
+    try {
+      const gmailFrom = `AtlasAutos <${process.env.EMAIL_USER}>`;
+      console.log(`[Email] Gmail SMTP fallback | From: ${gmailFrom} | To: ${to}`);
+      const info = await transporter.sendMail({
+        from: gmailFrom,
+        to: recipientList,
+        subject,
+        html
+      });
+      console.log(`[Email] Gmail SMTP SUCCESS | ID: ${info.messageId} | To: ${to}`);
+      return { id: info.messageId };
+    } catch (smtpErr) {
+      console.error(`[Email] Gmail SMTP FAILED | To: ${to} |`, smtpErr.message);
+    }
+  } else {
+    console.warn('[Email] No SMTP fallback — EMAIL_USER or EMAIL_PASS missing.');
+  }
+
+  console.error(`[Email] ALL delivery methods FAILED for: ${to} | Subject: ${subject}`);
+  return null;
 };
 
 // Email template wrapper with AtlasAutos branding
