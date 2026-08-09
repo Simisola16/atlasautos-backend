@@ -10,9 +10,11 @@ import {
 } from '../utils/emailService.js';
 import { uploadToCloudinary } from '../utils/cloudinary.js';
 
+const JWT_SECRET = process.env.JWT_SECRET || 'atlassyncnvnhgfvbhfcvfhvhfvbg';
+
 // Generate JWT token
 const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
+  return jwt.sign({ id }, JWT_SECRET, {
     expiresIn: '30d'
   });
 };
