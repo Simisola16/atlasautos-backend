@@ -94,6 +94,19 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Temporary debug endpoint — check which env vars are set on Render (no values exposed)
+app.get('/api/debug-env', (req, res) => {
+  res.status(200).json({
+    RESEND_API_KEY: !!process.env.RESEND_API_KEY,
+    EMAIL_FROM: process.env.EMAIL_FROM || 'NOT SET',
+    EMAIL_USER: !!process.env.EMAIL_USER,
+    EMAIL_PASS: !!process.env.EMAIL_PASS,
+    CLIENT_URL: process.env.CLIENT_URL || 'NOT SET',
+    MONGO_URI: !!process.env.MONGO_URI,
+    NODE_ENV: process.env.NODE_ENV || 'NOT SET',
+  });
+});
+
 // Socket.io connection handling
 const connectedUsers = new Map(); // userId -> socketId
 
