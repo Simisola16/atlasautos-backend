@@ -162,5 +162,21 @@ userSchema.post(['find', 'findOne', 'findOneAndUpdate'], function(docs) {
   sanitizeUserDocs(docs);
 });
 
+userSchema.set('toJSON', {
+  virtuals: true,
+  transform: (doc, ret) => {
+    sanitizeUserDocs(ret);
+    return ret;
+  }
+});
+
+userSchema.set('toObject', {
+  virtuals: true,
+  transform: (doc, ret) => {
+    sanitizeUserDocs(ret);
+    return ret;
+  }
+});
+
 const User = mongoose.model('User', userSchema);
 export default User;
