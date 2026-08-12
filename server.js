@@ -9,6 +9,7 @@ import mongoose from 'mongoose';
 import authRoutes from './routes/authRoutes.js';
 import carRoutes from './routes/carRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
+import statsRoutes from './routes/statsRoutes.js';
 
 // Import models for socket handlers
 import Chat from './models/Chat.js';
@@ -84,6 +85,7 @@ connectDB();
 app.use('/api/auth', authRoutes);
 app.use('/api/cars', carRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/stats', statsRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
